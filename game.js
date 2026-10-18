@@ -16,10 +16,14 @@ const STORAGE_KEY = 'takipciSehri.v1';
 const K = 160;              // 1 derece ≈ 160 hücre
 const B = 5;                // ızgara blok: 4x4 hücre + 1 hücre yol
 const D = 20, DC = 10.5;    // mahalle: 20x20 hücre (4x4 blok), kenarları ana cadde
-const LON0 = 25.7, LON1 = 45.0, LAT0 = 35.7, LAT1 = 42.2;
+const LON0 = 24.5, LON1 = 46.5, LAT0 = 34.7, LAT1 = 43.5;
 const COSL = Math.cos(39 * Math.PI / 180);
-const W = Math.ceil((LON1 - LON0) * COSL * K);
-const H = Math.ceil((LAT1 - LAT0) * K);
+const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
+const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
+const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
+const GW = W / G + 1, GH = H / G + 1;
+const WORLD_VERSION = 3;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
 // ---------- Harita (basitleştirilmiş Türkiye sınırı, [boylam, enlem]) ----------
@@ -43,7 +47,59 @@ const MARMARA = [[26.68,40.4],[27.0,40.62],[27.5,40.97],[28.0,41.0],[28.6,40.97]
   [29.9,40.73],[29.4,40.67],[29.1,40.42],[28.6,40.37],[28.0,40.4],[27.6,40.33],[27.2,40.42],[26.85,40.33]];
 const VAN = [[42.3,38.65],[42.55,38.9],[42.95,38.97],[43.3,38.85],[43.45,38.55],[43.1,38.38],[42.7,38.45]];
 const TUZ = [[33.2,39.05],[33.45,38.98],[33.6,38.62],[33.42,38.45],[33.25,38.62]];
-const RINGS = [TURKEY, MARMARA, VAN, TUZ].map(r => r.map(p => proj(p[0], p[1])));
+const TR_ISLANDS = [
+  [[25.65,40.2],[25.98,40.24],[26.0,40.12],[25.75,40.08]],                 // Gökçeada
+  [[25.97,39.85],[26.1,39.85],[26.07,39.78],[25.98,39.79]],                 // Bozcaada
+];
+const MARMARA_ADA = [[27.45,40.65],[27.75,40.65],[27.7,40.57],[27.5,40.57]];
+const LAKES = [VAN,
+  [[31.35,37.85],[31.6,37.85],[31.65,37.6],[31.4,37.55]],                    // Beyşehir
+  [[30.8,38.1],[30.95,38.05],[30.9,37.85],[30.78,37.9]],                     // Eğirdir
+  [[29.45,40.47],[29.6,40.46],[29.6,40.4],[29.42,40.42]],                    // İznik
+  [[30.15,40.74],[30.32,40.74],[30.32,40.7],[30.15,40.7]],                   // Sapanca
+  [[30.0,37.75],[30.25,37.8],[30.25,37.7],[30.05,37.68]],                    // Burdur
+  [[28.3,40.2],[28.6,40.2],[28.6,40.12],[28.3,40.12]],                       // Uluabat
+  [[38.3,37.55],[38.7,37.6],[38.95,37.92],[38.75,37.88],[38.5,37.62]],       // Atatürk Barajı
+  [[38.7,38.82],[39.3,38.87],[39.55,38.72],[39.0,38.74]],                    // Keban
+];
+// nehirler: [noktalar, genişlik (hücre)]
+const RIVERS = [
+  [[[38.3,39.9],[37.0,39.75],[36.0,39.3],[35.3,38.95],[34.6,39.1],[34.0,39.4],[33.5,39.85],[33.7,40.4],[34.3,40.9],[34.9,41.2],[35.5,41.4],[35.95,41.72]], 2.6], // Kızılırmak
+  [[[37.4,40.1],[36.55,40.32],[35.85,40.65],[36.2,40.9],[36.6,41.2],[36.75,41.38]], 2.2],   // Yeşilırmak
+  [[[31.0,39.3],[31.7,39.5],[32.1,39.65],[31.9,39.9],[31.0,40.0],[30.4,40.1],[30.0,40.35],[30.3,40.6],[30.5,40.85],[30.65,41.12]], 2.2], // Sakarya
+  [[[40.5,39.6],[39.5,39.6],[39.0,39.1],[38.8,38.7],[38.9,38.3],[38.6,37.9],[38.4,37.5],[38.0,37.1],[38.0,36.6]], 2.8],  // Fırat
+  [[[39.6,38.45],[40.0,38.1],[40.25,37.9],[40.8,37.8],[41.4,37.7],[41.9,37.45],[42.2,37.3],[42.4,37.0]], 2.6],          // Dicle
+  [[[29.9,38.25],[29.3,37.95],[28.6,37.9],[27.9,37.83],[27.3,37.55]], 2.0],                  // Büyük Menderes
+  [[[29.4,38.9],[28.6,38.5],[27.4,38.55],[26.85,38.62]], 2.0],                               // Gediz
+];
+// denizler (komşu kıyıları kabaca) ve yabancı adalar
+const TR_COAST_N = TURKEY.slice(6, 32);
+const iHatay = TURKEY.findIndex(p => p[0] === 35.92 && p[1] === 35.92);
+const BLACK_SEA = [...TR_COAST_N, [41.65,41.9],[41.6,42.5],[41.4,43.6],[27.95,43.6],[27.9,42.9],[27.45,42.5],[27.75,42.3]];
+const MED_SEA = [[26.04,40.73], ...TURKEY.slice(iHatay).reverse(), [35.9,35.4],[35.85,34.6],[24.4,34.6],[24.4,40.85],[24.9,40.9],[25.5,40.92]];
+const FOREIGN_ISLANDS = [
+  [[25.85,39.25],[26.2,39.38],[26.6,39.28],[26.4,39.0],[25.9,39.1]], [[25.85,38.55],[26.15,38.58],[26.15,38.25],[25.9,38.3]],
+  [[26.55,37.8],[27.05,37.75],[26.95,37.65],[26.6,37.68]], [[26.95,36.85],[27.35,36.9],[27.15,36.75]],
+  [[27.7,36.3],[28.25,36.45],[28.15,36.1],[27.75,35.9]], [[25.0,39.95],[25.4,40.0],[25.35,39.8],[25.1,39.8]],
+  [[24.6,40.8],[24.8,40.75],[24.75,40.6]], [[24.5,35.4],[25.5,35.35],[26.3,35.3],[26.2,35.0],[25.0,35.0],[24.5,35.15]],
+  [[32.27,35.1],[32.9,35.4],[33.6,35.36],[34.6,35.69],[34.0,35.1],[33.9,34.97],[33.0,34.56],[32.4,34.75]],
+];
+// dağ sıraları: [noktalar, yükseklik, genişlik (hücre)]
+const RIDGES = [
+  [[[30.4,40.85],[31.8,41.2],[33.5,41.45],[35.0,41.35],[36.5,40.85],[38.5,40.55],[40.0,40.65],[41.2,40.9],[42.2,41.2]], 7, 36],  // Kuzey Anadolu Dağları
+  [[[40.6,40.75],[41.3,40.9],[41.8,41.1]], 8, 18],                                                                                  // Kaçkarlar
+  [[[29.2,36.75],[30.0,37.1],[30.6,37.35],[31.4,37.15],[32.3,36.95],[33.3,36.95],[34.3,37.25],[35.2,37.7],[36.2,38.0],[37.4,38.25],[38.6,38.45],[39.8,38.55],[41.0,38.45],[42.4,38.05],[43.5,37.7],[44.3,37.4]], 10, 42], // Toroslar
+  [[[34.9,37.6],[35.3,37.9]], 13, 16],                                                                                               // Aladağlar
+  [[[27.5,38.3],[28.7,38.35]], 6, 14], [[[27.6,37.95],[28.6,37.95]], 5, 12],                                                         // Bozdağlar, Aydın
+  [[[28.4,39.0],[29.3,39.2],[30.2,39.3]], 5, 20],
+  [[[40.0,39.9],[41.5,40.3],[42.7,40.35]], 7, 30],
+  [[[40.5,43.4],[42.5,43.0],[44.5,42.7],[46.5,42.2]], 14, 40],                                                                       // Kafkaslar
+  [[[45.0,38.3],[45.6,37.0],[46.5,36.0]], 10, 40],                                                                                   // Zagros
+  [[[23.5,41.7],[25.0,41.5],[26.0,41.6]], 6, 30], [[[23,42.75],[25,42.75],[27,42.7]], 6, 25],                                        // Rodoplar, Balkanlar
+];
+const PEAKS = [[44.3,39.7,22,22],[42.83,38.93,14,14],[42.23,38.65,8,10],[35.45,38.53,15,16],[34.17,38.13,10,11],[29.2,40.07,9,16],[39.8,37.65,4,14],[41.1,40.83,6,10]];
+const pr = r => r.map(p => proj(p[0], p[1]));
+const TR_OUTLINE = pr(TURKEY);
 
 // 81 il, plaka sırasıyla: [ad, boylam, enlem, nüfus (100 bin)]
 const PROVINCES = [
@@ -275,21 +331,48 @@ let BASE = null, dirty = null, lastTex = 0;
 const landTex = new THREE.CanvasTexture(off);
 landTex.colorSpace = THREE.SRGBColorSpace;
 landTex.anisotropy = 8;
-landTex.magFilter = THREE.NearestFilter;
-const land = new THREE.Mesh(
-  new THREE.PlaneGeometry(W, H).rotateX(-Math.PI / 2).translate(W / 2, 0, H / 2),
-  new THREE.MeshLambertMaterial({ map: landTex, alphaTest: 0.5 })
-);
-land.receiveShadow = true;
-scene.add(land);
-scene.add(new THREE.Mesh(new THREE.PlaneGeometry(60000, 60000).rotateX(-Math.PI / 2).translate(W / 2, -0.15, H / 2),
-  new THREE.MeshLambertMaterial({ color: SEA })));
-{
-  const pts = [];
-  for (const r of RINGS) for (let i = 0; i < r.length; i++) { const a = r[i], b = r[(i + 1) % r.length]; pts.push(a[0], 0.2, a[1], b[0], 0.2, b[1]); }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-  scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .55, fog: false })));
+
+function canvasTexEarly(w, h, draw, repeat, linear) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); if (!linear) t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...repeat); }
+  return t;
 }
+// 3D arazi: 4 hücrede bir köşe, yükseklik + şehir çevresinde düzleşme
+const terrainGeo = new THREE.PlaneGeometry(W, H, GW - 1, GH - 1).rotateX(-Math.PI / 2).translate(W / 2, 0, H / 2);
+const land = new THREE.Mesh(terrainGeo, new THREE.MeshLambertMaterial({ map: landTex, transparent: true, alphaTest: .02 }));
+land.receiveShadow = true; land.castShadow = true;
+scene.add(land);
+// deniz: kıyıda turkuaz, açıkta lacivert, dalga parıltısı
+const seaNormal = canvasTexEarly(256, 256, (g, w, h) => {
+  const hgt = (x, y) => vnoise(x / 18, y / 18) * .6 + vnoise(x / 7 + 9, y / 7 + 3) * .4, img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const dx = hgt((x + 1) % w, y) - hgt((x - 1 + w) % w, y), dy = hgt(x, (y + 1) % h) - hgt(x, (y - 1 + h) % h);
+    const nx = -dx * 2.2, ny = -dy * 2.2, l = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
+    img.data[i] = (nx / l * .5 + .5) * 255; img.data[i + 1] = (ny / l * .5 + .5) * 255; img.data[i + 2] = (1 / l * .5 + .5) * 255; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+}, [W / 70, H / 70], true);
+const seaNormalFar = seaNormal.clone(); seaNormalFar.repeat.set(1140, 1140); seaNormalFar.needsUpdate = true;
+const seaCanvas = document.createElement('canvas'); seaCanvas.width = GW; seaCanvas.height = GH;
+const seaColTex = new THREE.CanvasTexture(seaCanvas); seaColTex.colorSpace = THREE.SRGBColorSpace;
+const seaMats = [];
+const seaMat = o => { const m = new THREE.MeshPhongMaterial({ shininess: 60, specular: '#8fb6cf', normalScale: new THREE.Vector2(.5, .5), ...o }); seaMats.push(m); return m; };
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(W, H).rotateX(-Math.PI / 2).translate(W / 2, -.12, H / 2), seaMat({ map: seaColTex, normalMap: seaNormal })));
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2).translate(W / 2, -.2, H / 2), seaMat({ color: '#24649f', normalMap: seaNormalFar })));
+// bulutlar (uzaktan bakınca)
+const cloudTex = canvasTexEarly(128, 128, g => {
+  for (let i = 0; i < 9; i++) { const x = 30 + Math.random() * 68, y = 40 + Math.random() * 48, r = 18 + Math.random() * 22;
+    const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }
+});
+const clouds = [];
+for (let i = 0; i < 18; i++) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTex, transparent: true, depthWrite: false, opacity: 0, fog: false }));
+  const s = 160 + hash2(i, 5) * 260; sp.scale.set(s, s * .62, 1);
+  sp.position.set(hash2(i, 1) * W, 120 + hash2(i, 2) * 80, hash2(i, 3) * H); scene.add(sp); clouds.push(sp);
+}
+let borderLine = null;
 
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -363,6 +446,9 @@ const P = {
   parkD: new Pool(new THREE.CylinderGeometry(1, 1, .02, 40).translate(0, .01, 0), matLambert({ color: '#9cc85c' }), { cast: false, receive: true, color: false }),
   trunk: new Pool(new THREE.CylinderGeometry(.035, .05, .26, 5).translate(0, .13, 0), matLambert({ color: '#6b5138' }), { color: false }),
   leaf:  new Pool(new THREE.ConeGeometry(.2, .5, 6).translate(0, .45, 0), matLambert({ color: '#ffffff', flatShading: true })),
+  fTrunk: new Pool(new THREE.CylinderGeometry(.035, .05, .26, 5).translate(0, .13, 0), matLambert({ color: '#6b5138' }), { color: false, cap: 8192 }),
+  fPine: new Pool(new THREE.ConeGeometry(.2, .55, 6).translate(0, .48, 0), matLambert({ color: '#ffffff', flatShading: true }), { cap: 8192 }),
+  fRound: new Pool(new THREE.IcosahedronGeometry(.25, 0).translate(0, .45, 0), matLambert({ color: '#ffffff', flatShading: true }), { cap: 8192 }),
   carB:  new Pool(new THREE.BoxGeometry(.36, .1, .18).translate(0, .07, 0), matLambert({ color: '#ffffff' })),
   carC:  new Pool(new THREE.BoxGeometry(.2, .085, .16).translate(-.02, .16, 0), matLambert({ color: '#30363d' }), { color: false }),
 };
@@ -397,27 +483,199 @@ const districts = new Map();
 const cars = [];
 let nSeg = 0, nDash = 0, nDisc = 0, nPark = 0;
 
-function buildLand() {
+// ---------- Harita: maskeler, yükseklik, bölge renkleri ----------
+const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+let KIND = null;                       // 0 su, 1 Türkiye, 2 komşu ülke, 3 tuz
+let BASE0 = null;                      // değişmeyen zemin rengi (RGB)
+const H0 = new Float32Array(GW * GH), FG = new Float32Array(GW * GH).fill(1), DENS = new Float32Array(GW * GH), ROUNDF = new Float32Array(GW * GH);
+function fillRings(rings, mask, val = 1) {
   const xs = [];
   for (let y = 0; y < H; y++) {
-    const yc = y + 0.5; xs.length = 0;
-    for (const r of RINGS) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const yc = y + .5; xs.length = 0;
+    for (const r of rings) for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
       const [x1, y1] = r[i], [x2, y2] = r[j];
       if ((y1 > yc) !== (y2 > yc)) xs.push(x1 + (yc - y1) / (y2 - y1) * (x2 - x1));
     }
     xs.sort((a, b) => a - b);
     for (let k = 0; k + 1 < xs.length; k += 2) {
-      const a = Math.max(0, Math.ceil(xs[k] - 0.5)), b = Math.min(W - 1, Math.floor(xs[k+1] - 0.5));
-      for (let x = a; x <= b; x++) LAND[y * W + x] = 1;
+      const a = Math.max(0, Math.ceil(xs[k] - .5)), b = Math.min(W - 1, Math.floor(xs[k + 1] - .5));
+      for (let x = a; x <= b; x++) mask[y * W + x] = val;
     }
   }
-  BASE = new Uint8ClampedArray(W * H * 4);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const c = y * W + x; if (!LAND[c]) continue;
-    const n = vnoise(x*0.01, y*0.01)*0.7 + vnoise(x*0.06, y*0.06)*0.3, t = (n - .5) * 0.18 + (x / W) * 0.12;
-    const i = c * 4;
-    BASE[i] = GRASS[0] * (1 + t); BASE[i+1] = GRASS[1] * (1 + t*0.4); BASE[i+2] = GRASS[2] * (1 + t*0.6); BASE[i+3] = 255;
+}
+function distToPoly(pts, x, z) {
+  let best = 1e9;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, az] = pts[i - 1], [bx, bz] = pts[i], dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1;
+    const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1), d = Math.hypot(x - ax - dx * t, z - az - dz * t);
+    if (d < best) best = d;
   }
+  return best;
+}
+function chamfer(src) {
+  const d = new Float32Array(GW * GH); for (let i = 0; i < d.length; i++) d[i] = src[i] ? 0 : 1e9;
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) { const i = y * GW + x; let v = d[i];
+    if (x > 0) v = Math.min(v, d[i - 1] + 1);
+    if (y > 0) { v = Math.min(v, d[i - GW] + 1); if (x > 0) v = Math.min(v, d[i - GW - 1] + 1.414); if (x < GW - 1) v = Math.min(v, d[i - GW + 1] + 1.414); }
+    d[i] = v; }
+  for (let y = GH - 1; y >= 0; y--) for (let x = GW - 1; x >= 0; x--) { const i = y * GW + x; let v = d[i];
+    if (x < GW - 1) v = Math.min(v, d[i + 1] + 1);
+    if (y < GH - 1) { v = Math.min(v, d[i + GW] + 1); if (x < GW - 1) v = Math.min(v, d[i + GW + 1] + 1.414); if (x > 0) v = Math.min(v, d[i + GW - 1] + 1.414); }
+    d[i] = v; }
+  return d;
+}
+const C = { steppe: [196,186,104], east: [136,160,76], se: [204,176,114], med: [124,168,62], black: [70,140,52],
+  rock: [140,128,110], snow: [245,247,250], sand: [226,210,165], salt: [238,234,228] };
+const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+function buildLand() {
+  // maskeler
+  const outer = new Uint8Array(W * H), sea = new Uint8Array(W * H), salt = new Uint8Array(W * H);
+  fillRings([TURKEY, ...TR_ISLANDS].map(pr), outer);
+  fillRings([TURKEY, ...TR_ISLANDS, MARMARA, MARMARA_ADA, ...LAKES].map(pr), LAND);
+  fillRings([BLACK_SEA, MED_SEA, ...FOREIGN_ISLANDS].map(pr), sea);
+  fillRings([pr(TUZ)], salt);
+  KIND = new Uint8Array(W * H);
+  for (let c = 0; c < W * H; c++) {
+    if (salt[c] && LAND[c]) { LAND[c] = 0; KIND[c] = 3; }
+    else KIND[c] = LAND[c] ? 1 : (!outer[c] && !sea[c]) ? 2 : 0;
+  }
+  for (const [pts, wd] of RIVERS) {   // nehirler: Türkiye içinde su
+    const P_ = pr(pts);
+    for (let i = 1; i < P_.length; i++) {
+      const [ax, az] = P_[i - 1], [bx, bz] = P_[i], r = wd / 2;
+      for (let z = Math.floor(Math.min(az, bz) - r); z <= Math.max(az, bz) + r; z++) for (let x = Math.floor(Math.min(ax, bx) - r); x <= Math.max(ax, bx) + r; x++) {
+        if (x < 0 || z < 0 || x >= W || z >= H) continue;
+        const c = z * W + x; if (KIND[c] !== 1) continue;
+        if (distToPoly([[ax, az], [bx, bz]], x + .5, z + .5) < r) { LAND[c] = 0; KIND[c] = 0; }
+      }
+    }
+  }
+  // kaba ızgara alanları
+  const kAt = (ix, iy) => KIND[Math.min(H - 1, iy * G) * W + Math.min(W - 1, ix * G)];
+  const water = new Uint8Array(GW * GH), black = new Uint8Array(GW * GH), med = new Uint8Array(GW * GH);
+  for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) {
+    const i = iy * GW + ix, k = kAt(ix, iy), [lon, lat] = unproj(ix * G, iy * G);
+    const inner = outer[Math.min(H - 1, iy * G) * W + Math.min(W - 1, ix * G)];
+    water[i] = k === 0 || k === 3;
+    if (k === 0 && !inner) { if (lat > 41.05 && lon > 27.9 && lon < 41.8) black[i] = 1; else med[i] = 1; }
+  }
+  const dW = chamfer(water), dB = chamfer(black), dM = chamfer(med);
+  dL = chamfer(water.map(v => v ? 0 : 1));
+  const RP = RIDGES.map(([pts, h, w]) => { const q = pr(pts); const xs = q.map(p => p[0]), zs = q.map(p => p[1]);
+    return { q, h, w, x0: Math.min(...xs) - w * 3, x1: Math.max(...xs) + w * 3, z0: Math.min(...zs) - w * 3, z1: Math.max(...zs) + w * 3 }; });
+  const PK = PEAKS.map(([lo, la, h, w]) => { const [x, z] = proj(lo, la); return { x, z, h, w }; });
+  const COL = new Float32Array(GW * GH * 3);
+  for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) {
+    const i = iy * GW + ix, x = ix * G, z = iy * G, [lon, lat] = unproj(x, z), k = kAt(ix, iy);
+    let h = 0;
+    for (const r of RP) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) { const d = distToPoly(r.q, x, z); h += r.h * Math.exp(-((d / r.w) ** 2)); }
+    let pk = 0; for (const p of PK) pk = Math.max(pk, p.h * Math.exp(-((Math.hypot(x - p.x, z - p.z) / p.w) ** 2)));
+    const rug = 1 - Math.abs(2 * vnoise(x * .035, z * .035) - 1), det = fbm(x * .015, z * .015);
+    const plateau = 1.4 * sm(36.7, 37.6, lat) * sm(41.6, 40.6, lat) * sm(29.5, 31, lon) + 2.8 * sm(38, 41, lon) * sm(42.6, 41.4, lat);
+    h = h * (.45 + .9 * rug) + pk + plateau * (.8 + .4 * det) + .8 * det;
+    const edge = Math.min(x, W - x, z, H - z);
+    h *= sm(0, 5, dW[i]) * (k === 2 ? sm(20, 140, edge) : 1);
+    const hRaw = water[i] ? 0 : Math.max(0, h); H0[i] = hRaw * 2.1;
+    // bölge rengi
+    const db = dB[i] * G, dm = dM[i] * G;
+    const wB = sm(110, 25, db), wM = sm(90, 15, dm), wE = sm(37.8, 39.8, lon), wS = sm(38.3, 37.3, lat) * sm(36.3, 37.6, lon);
+    let col = C.steppe; col = mixc(col, C.east, wE); col = mixc(col, C.se, wS); col = mixc(col, C.med, wM); col = mixc(col, C.black, wB);
+    const rock = sm(9, 13.5, hRaw), snow = sm(16.5, 20, hRaw + (vnoise(x * .05, z * .05) - .5) * 3);
+    col = mixc(col, C.rock, rock * .85); col = mixc(col, C.snow, snow);
+    col = mixc(col, C.sand, sm(3.2, .9, dW[i] * G) * Math.max(wM, wB * .6) * (1 - rock));
+    if (k === 2) { const gy = (col[0] + col[1] + col[2]) / 3; col = mixc(col, [gy, gy, gy], .55).map(v => v * .93); }
+    COL[i * 3] = col[0]; COL[i * 3 + 1] = col[1]; COL[i * 3 + 2] = col[2];
+    DENS[i] = k === 3 || water[i] ? 0 : (.035 + .6 * wB * (1 - rock) + .32 * wM * sm(1, 5, hRaw) * (1 - rock) + .06 * wE) * (1 - snow) * (k === 2 ? .5 : 1);
+    ROUNDF[i] = wB * .65;
+  }
+  // deniz rengi
+  const sctx = seaCanvas.getContext('2d'), simg = sctx.createImageData(GW, GH);
+  for (let i = 0; i < GW * GH; i++) { const t = dL[i], ex = (i % GW) * G, ez = ((i / GW) | 0) * G, edge = Math.min(ex, W - ex, ez, H - ez);
+    let c = mixc([96, 206, 214], mixc([58, 160, 205], [36, 100, 160], sm(4, 30, t)), sm(.5, 3, t));
+    c = mixc([36, 100, 160], c, sm(30, 160, edge));
+    simg.data[i * 4] = c[0]; simg.data[i * 4 + 1] = c[1]; simg.data[i * 4 + 2] = c[2]; simg.data[i * 4 + 3] = 255; }
+  sctx.putImageData(simg, 0, 0); seaColTex.needsUpdate = true;
+  // hücre renkleri
+  BASE0 = new Uint8ClampedArray(W * H * 3); BASE = new Uint8ClampedArray(W * H * 4);
+  for (let z = 0; z < H; z++) {
+    const iy = Math.min(GH - 2, (z / G) | 0), fz = z / G - iy;
+    for (let x = 0; x < W; x++) {
+      const c = z * W + x, k = KIND[c]; if (k === 0) continue;
+      const ix = Math.min(GW - 2, (x / G) | 0), fx = x / G - ix, i = iy * GW + ix;
+      const nz = 1 + (vnoise(x * .08, z * .08) - .5) * .1 + (hash2(x, z) - .5) * .015;
+      for (let ch = 0; ch < 3; ch++) {
+        let v = (COL[i * 3 + ch] * (1 - fx) + COL[(i + 1) * 3 + ch] * fx) * (1 - fz) + (COL[(i + GW) * 3 + ch] * (1 - fx) + COL[(i + GW + 1) * 3 + ch] * fx) * fz;
+        if (k === 3) v = C.salt[ch];
+        BASE0[c * 3 + ch] = v * nz;
+      }
+      const edge = Math.min(x, W - x, z, H - z);
+      BASE[c * 4 + 3] = k === 2 ? 255 * sm(20, 140, edge) : 255;
+    }
+  }
+  restoreBase();
+  updateTerrain(0, 0, GW - 1, GH - 1);
+  // Türkiye sınır çizgisi (arazinin üstünden)
+  const pts = [];
+  for (let i = 0; i < TR_OUTLINE.length; i++) {
+    const [ax, az] = TR_OUTLINE[i], [bx, bz] = TR_OUTLINE[(i + 1) % TR_OUTLINE.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 3));
+    for (let k = 0; k < n; k++) { const t0 = k / n, t1 = (k + 1) / n;
+      const x0 = lerp(ax, bx, t0), z0 = lerp(az, bz, t0), x1 = lerp(ax, bx, t1), z1 = lerp(az, bz, t1);
+      pts.push(x0, heightAt(x0, z0) + .4, z0, x1, heightAt(x1, z1) + .4, z1); }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  borderLine = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .5, fog: false }));
+  scene.add(borderLine);
+}
+let dL = null;
+function restoreBase() {
+  for (let c = 0; c < W * H; c++) { BASE[c * 4] = BASE0[c * 3]; BASE[c * 4 + 1] = BASE0[c * 3 + 1]; BASE[c * 4 + 2] = BASE0[c * 3 + 2]; if (KIND[c] === 1 || KIND[c] === 3) BASE[c * 4 + 3] = 255; }
+}
+const terrY = i => H0[i] * FG[i];
+function updateTerrain(ix0, iy0, ix1, iy1) {
+  ix0 = Math.max(0, ix0); iy0 = Math.max(0, iy0); ix1 = Math.min(GW - 1, ix1); iy1 = Math.min(GH - 1, iy1);
+  const pos = terrainGeo.attributes.position.array, nor = terrainGeo.attributes.normal.array;
+  for (let iy = iy0; iy <= iy1; iy++) for (let ix = ix0; ix <= ix1; ix++) { const i = iy * GW + ix; pos[i * 3 + 1] = terrY(i); }
+  for (let iy = Math.max(0, iy0 - 1); iy <= Math.min(GH - 1, iy1 + 1); iy++) for (let ix = Math.max(0, ix0 - 1); ix <= Math.min(GW - 1, ix1 + 1); ix++) {
+    const i = iy * GW + ix;
+    const hl = terrY(iy * GW + Math.max(0, ix - 1)), hr = terrY(iy * GW + Math.min(GW - 1, ix + 1));
+    const hu = terrY(Math.max(0, iy - 1) * GW + ix), hd = terrY(Math.min(GH - 1, iy + 1) * GW + ix);
+    const nx = hl - hr, ny = 2 * G, nz = hu - hd, l = Math.hypot(nx, ny, nz);
+    nor[i * 3] = nx / l; nor[i * 3 + 1] = ny / l; nor[i * 3 + 2] = nz / l;
+  }
+  terrainGeo.attributes.position.needsUpdate = true; terrainGeo.attributes.normal.needsUpdate = true;
+}
+function heightAt(x, z) {
+  const fx = clamp(x / G, 0, GW - 1.001), fz = clamp(z / G, 0, GH - 1.001), ix = fx | 0, iy = fz | 0, tx = fx - ix, tz = fz - iy, i = iy * GW + ix;
+  return (terrY(i) * (1 - tx) + terrY(i + 1) * tx) * (1 - tz) + (terrY(i + GW) * (1 - tx) + terrY(i + GW + 1) * tx) * tz;
+}
+const flatAt = (x, z) => { const ix = clamp(Math.round(x / G), 0, GW - 1), iy = clamp(Math.round(z / G), 0, GH - 1); return FG[iy * GW + ix]; };
+// Şehir kurulan yer düzleşir ve yeşillenir; dağlar şehrin etrafında kalır
+const flatDirty = new Set(); let lastFlat = 0;
+const ZONE = [124, 164, 42];
+function processFlatten(force) {
+  if (!flatDirty.size) return;
+  const now = performance.now(); if (!force && now - lastFlat < 300) return; lastFlat = now;
+  let r0 = 1e9, r1 = -1, q0 = 1e9, q1 = -1;
+  for (const pv of flatDirty) {
+    const bb = PROV_BB[pv]; if (!bb) continue;
+    const A = 22, Fo = 40, M = A + Fo;
+    const ix0 = Math.max(0, Math.floor((bb.x0 - M) / G)), ix1 = Math.min(GW - 1, Math.ceil((bb.x1 + M) / G));
+    const iy0 = Math.max(0, Math.floor((bb.y0 - M) / G)), iy1 = Math.min(GH - 1, Math.ceil((bb.y1 + M) / G));
+    for (let iy = iy0; iy <= iy1; iy++) for (let ix = ix0; ix <= ix1; ix++) {
+      const x = ix * G, z = iy * G, dx = Math.max(bb.x0 - A - x, 0, x - (bb.x1 + A)), dz = Math.max(bb.y0 - A - z, 0, z - (bb.y1 + A));
+      const d = Math.hypot(dx, dz), f = d <= 0 ? 0 : sm(0, Fo, d + (vnoise(x * .045, z * .045) - .5) * 34), i = iy * GW + ix; if (f < FG[i]) FG[i] = f;
+    }
+    r0 = Math.min(r0, ix0); r1 = Math.max(r1, ix1); q0 = Math.min(q0, iy0); q1 = Math.max(q1, iy1);
+    for (let z = Math.max(0, bb.y0 - M); z <= Math.min(H - 1, bb.y1 + M); z++) for (let x = Math.max(0, bb.x0 - M); x <= Math.min(W - 1, bb.x1 + M); x++) {
+      const c = z * W + x; if (KIND[c] !== 1) continue;
+      const F = flatAt(x, z); if (F > .995) continue;
+      const t = (1 - F) * .8, b = c * 4, o = c * 3;
+      BASE[b] = BASE0[o] + (ZONE[0] - BASE0[o]) * t; BASE[b + 1] = BASE0[o + 1] + (ZONE[1] - BASE0[o + 1]) * t; BASE[b + 2] = BASE0[o + 2] + (ZONE[2] - BASE0[o + 2]) * t;
+      const st = STATE[c]; if (st === 1 || st === 3 || st === 5) paintCell(c);
+    }
+  }
+  flatDirty.clear();
+  if (r1 >= 0) updateTerrain(r0, q0, r1, q1);
 }
 function nearestProv(x, y) { let best = 0, bd = 1e18;
   for (const p of PROVINCES) { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd) { bd = d; best = p.i; } } return best; }
@@ -497,8 +755,7 @@ function flushImage(force) {
 }
 function paintCell(c, rgb) {
   const i = c * 4;
-  if (!rgb) { if (STATE[c] === 2) rgb = ROAD_RGB;
-    else { PIX[i] = BASE[i]; PIX[i+1] = BASE[i+1]; PIX[i+2] = BASE[i+2]; PIX[i+3] = BASE[i+3]; markDirty(c % W, (c / W) | 0); return; } }
+  if (!rgb) { { PIX[i] = BASE[i]; PIX[i+1] = BASE[i+1]; PIX[i+2] = BASE[i+2]; PIX[i+3] = BASE[i+3]; markDirty(c % W, (c / W) | 0); return; } }
   PIX[i] = rgb[0]; PIX[i+1] = rgb[1]; PIX[i+2] = rgb[2]; PIX[i+3] = 255;
   markDirty(c % W, (c / W) | 0);
 }
@@ -513,6 +770,7 @@ function resetWorld() {
   for (const g of bGroups.values()) { scene.remove(g); g.traverse(o => o.geometry?.dispose()); }
   bGroups.clear();
   Object.values(P).forEach(p => p.clear());
+  FG.fill(1); flatDirty.clear(); restoreBase(); updateTerrain(0, 0, GW - 1, GH - 1); forestKey = '';
   PIX.set(BASE); dirty = { x0: 0, y0: 0, x1: W - 1, y1: H - 1 };
 }
 function nextFreeSlot(pv) {
@@ -561,7 +819,7 @@ function setHouse(h, s, animate) {
   HOUSE_SLOT[h] = s; HOUSE_CELL[h] = c; SLOT_TAKEN[s] = 1; CELL_HOUSE[c] = h;
   if (STATE[c] !== 4) STATE[c] = 3;
   const x = c % W, y = (c / W) | 0;
-  bbox = growBox(bbox, x, y); PROV_BB[pv] = growBox(PROV_BB[pv], x, y);
+  bbox = growBox(bbox, x, y); PROV_BB[pv] = growBox(PROV_BB[pv], x, y); flatDirty.add(pv);
   houseColors(h);
   if (animate) { born.set(h, performance.now()); houseMatrices(h, 0); } else houseMatrices(h, 1);
   const dk = ((x / D) | 0) * 100000 + ((y / D) | 0), dd = districts.get(dk);
@@ -645,12 +903,13 @@ function addPiece(d, p) {
 
 // ---------- Ağaçlar + parklar (sadece evi olan illerin çevresinde) ----------
 function rebuildTrees() {
+  processFlatten(true);
   P.trunk.clear(); P.leaf.clear();
   stampId = (stampId % 254) + 1;
   let n = 0;
   const plant = (x, z, sc, seed) => {
     if (n >= 30000) return;
-    _p.set(x, 0, z); _m.compose(_p, QI, _s.set(sc, sc, sc));
+    _p.set(x, heightAt(x, z), z); _m.compose(_p, QI, _s.set(sc, sc, sc));
     P.trunk.set(n, _m); P.leaf.set(n, _m); _c.set(TREE_HEX[Math.floor(hash2(seed, 7) * 4)]); P.leaf.color(n, _c); n++;
   };
   const tree = (x, y, s) => plant(x + .5 + (hash2(x * 5, y * 3) - .5) * .5, y + .5 + (hash2(y * 5, x * 3) - .5) * .5, s * (.75 + hash2(x, y * 11) * .6), x * 31 + y);
@@ -668,12 +927,33 @@ function rebuildTrees() {
       }
       const lx = x % B, ly = y % B;
       if (lx >= 2 && lx <= 3 && ly >= 2 && ly <= 3 && STATE[(byy * B + 1) * W + bxx * B + 1] === 3) { if (hash2(x * 3, y * 5) < .35) tree(x, y, .9); continue; }
-      const r = hash2(x, y);
-      if (r < .008 || (r < .16 && vnoise(x * .07, y * .07) > .74)) tree(x, y, 1);
     }
   }
   for (const d of builtDistricts) if (d.built >= d.T.parkRC) d.T.trees.forEach((t, i) => { const [x, z] = tf(d, t[0], t[1]); plant(x, z, t[2], d.id * 17 + i); });
   flushImage(true);
+}
+
+// ---------- Ormanlar: kameranın etrafında, bölgeye göre yoğunluk ----------
+let forestKey = '';
+function updateForest() {
+  if (rig.dist > 460) { if (forestKey) { P.fTrunk.clear(); P.fPine.clear(); P.fRound.clear(); forestKey = ''; } return; }
+  const half = clamp(rig.dist * 1.7, 50, 400), stride = Math.max(1, Math.floor(half / 140)), cell = half * .35;
+  const key = `${Math.round(rig.tx / cell)},${Math.round(rig.tz / cell)},${stride}`;
+  if (key === forestKey) return; forestKey = key;
+  P.fTrunk.clear(); P.fPine.clear(); P.fRound.clear();
+  let n = 0, np = 0, nr = 0;
+  const x0 = Math.max(0, Math.floor((rig.tx - half) / stride) * stride), x1 = Math.min(W - 1, rig.tx + half);
+  const z0 = Math.max(0, Math.floor((rig.tz - half) / stride) * stride), z1 = Math.min(H - 1, rig.tz + half);
+  for (let z = z0; z <= z1 && n < 70000; z += stride) for (let x = x0; x <= x1; x += stride) {
+    const c = z * W + x, k = KIND[c]; if (!((k === 1 && STATE[c] === 1) || k === 2)) continue;
+    const gi = Math.min(GH - 1, Math.round(z / G)) * GW + Math.min(GW - 1, Math.round(x / G));
+    if (FG[gi] < .6 || hash2(x * 3 + 1, z * 7 + 2) > DENS[gi]) continue;
+    const px = x + .5 + (hash2(x, z * 3) - .5) * stride * .8, pz = z + .5 + (hash2(z, x * 5) - .5) * stride * .8;
+    const sc = (.8 + hash2(x * 11, z) * .6) * Math.pow(stride, .55);
+    _p.set(px, heightAt(px, pz), pz); _m.compose(_p, QI, _s.set(sc, sc, sc)); P.fTrunk.set(n++, _m);
+    _c.set(TREE_HEX[Math.floor(hash2(x, z * 7) * 4)]);
+    if (hash2(x * 5, z * 9) < ROUNDF[gi]) { P.fRound.set(nr, _m); P.fRound.color(nr++, _c); } else { P.fPine.set(np, _m); P.fPine.color(np++, _c); }
+  }
 }
 
 // ---------- Arabalar ----------
@@ -758,7 +1038,7 @@ function updateCars(dt, now) {
 // ==========================================================
 let DATA = null;
 let OWNER_INDEX = [];
-const defaultData = () => ({ v: 2, handle: '', town: '', seed: 'İstanbul', log: [], owners: {} });
+const defaultData = () => ({ v: 2, world: WORLD_VERSION, handle: '', town: '', seed: 'İstanbul', log: [], owners: {} });
 const townName = () => (DATA.town || 'takipçi şehri').toLocaleLowerCase('tr-TR');
 const seedProv = () => provIndex(DATA.seed);
 
@@ -775,7 +1055,7 @@ function replay() {
   resetWorld();
   for (const e of DATA.log) applyEntry(e, false);
   if (!houseCount) { const pv = seedProv(), s = PROV_START[pv]; if (SLOT_DIST[s] >= 0) revealArterials(CDIST[SLOT_DIST[s]], 0); }
-  rebuildTrees(); flushImage(true); rebuildOwnerIndex(); updateStats();
+  processFlatten(true); rebuildTrees(); flushImage(true); rebuildOwnerIndex(); updateStats();
 }
 function rebuildOwnerIndex() {
   OWNER_INDEX = [];
@@ -1059,7 +1339,8 @@ function drawFx() {
 const rig = { tx: W / 2, tz: H / 2, dist: 2000, pitch: 1.55, yaw: 0, orbit: 0 };
 const FOV = 45, TOP = 89.4 * Math.PI / 180;
 const pitchFor = d => (38 + clamp((Math.log(d) - Math.log(10)) / (Math.log(600) - Math.log(10)), 0, 1) * 51.5) * Math.PI / 180;
-const fitTurkeyDist = () => Math.max(H / 2, W / 2 / (vw / vh)) * 1.04 / Math.tan(FOV / 2 * Math.PI / 180);
+const TRB = (() => { const xs = TR_OUTLINE.map(p => p[0]), zs = TR_OUTLINE.map(p => p[1]); return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) }; })();
+const fitTurkeyDist = () => Math.max((TRB.z1 - TRB.z0) / 2, (TRB.x1 - TRB.x0) / 2 / (vw / vh)) * 1.06 / Math.tan(FOV / 2 * Math.PI / 180);
 function applyCam() {
   const hd = rig.dist * Math.cos(rig.pitch), y = rig.dist * Math.sin(rig.pitch);
   camera.position.set(rig.tx + Math.sin(rig.yaw) * hd, y, rig.tz + Math.cos(rig.yaw) * hd);
@@ -1094,7 +1375,7 @@ function fitBox(b, aspect = vw / vh) {
   const dist = clamp(Math.max(bw_ / aspect, bh_ * .8) * .5 / Math.tan(FOV / 2 * Math.PI / 180) * .92, 12, fitTurkeyDist());
   return { tx: (b.x0 + b.x1 + 1) / 2, tz: (b.y0 + b.y1 + 1) / 2, dist };
 }
-const turkeyView = () => ({ tx: W / 2, tz: H / 2, dist: fitTurkeyDist(), pitch: TOP, yaw: 0 });
+const turkeyView = () => ({ tx: (TRB.x0 + TRB.x1) / 2, tz: (TRB.z0 + TRB.z1) / 2, dist: fitTurkeyDist(), pitch: TOP, yaw: 0 });
 function resize() {
   const r = stage.getBoundingClientRect(); vw = r.width || innerWidth || 1024; vh = r.height || innerHeight || 768;
   const dpr = Math.min(devicePixelRatio || 1, 2);
@@ -1135,14 +1416,14 @@ function updateLabels() {
       .map(v => [v, (v.x - rig.tx) ** 2 + (v.y - rig.tz) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, 12);
     for (const [v] of ds) items.push([mahName((v.x / D) | 0, (v.y / D) | 0), v.x, 1.5, v.y, 'mah']);
   }
-  if (d < 55) {
-    const R2 = (d * 1.1) ** 2; let n = 0;
+  if (d < 28) {   // en yakın evlerin sahipleri
+    const R2 = (d * .8) ** 2, near = [];
     for (const [, num, name] of OWNER_INDEX) {
       if (num - 1 === selected) continue;
-      const [x, y] = housePos(num - 1);
-      if ((x - rig.tx) ** 2 + (y - rig.tz) ** 2 > R2) continue;
-      items.push(['@' + name, x, 1.05, y, 'own']); if (++n > 60) break;
+      const [x, y] = housePos(num - 1), dd = (x - rig.tx) ** 2 + (y - rig.tz) ** 2;
+      if (dd < R2) near.push([dd, name, x, y]);
     }
+    near.sort((a, b) => a[0] - b[0]).slice(0, 14).forEach(([, name, x, y]) => items.push(['@' + name, x, 1.05, y, 'own']));
   }
   if (d < 300) for (const b of buildings) items.push([bLabel(b), b.x + bw(b) / 2, b.type === 'skyscraper' || b.type === 'tower' ? 11.5 : 4.2, b.y + bh(b) / 2, 'bld']);
   if (selected >= 0 && selected < houseCount && !video) { const [x, z] = housePos(selected); items.push([houseName(selected), x, 1.75 * clamp(rig.dist * .045, .9, 30), z, 'sel']); }
@@ -1179,19 +1460,26 @@ function frame(now) {
   for (const [h, t0] of born) { const t = (now - t0) / 480; if (t >= 1) { born.delete(h); houseMatrices(h, 1); } else houseMatrices(h, easeOutBack(Math.max(0, t))); }
   if (rig.orbit) rig.yaw += rig.orbit * dt;
   if (!Number.isFinite(rig.dist) || !Number.isFinite(rig.tx)) { resize(); Object.assign(rig, turkeyView()); }
+  processFlatten(false);
   updateCars(dt, now);
+  seaNormal.offset.x += dt * .008; seaNormal.offset.y += dt * .005; seaNormalFar.offset.copy(seaNormal.offset);
+  { const ns = clamp(1.2 - Math.log10(rig.dist) * .4, .08, .55); for (const m of seaMats) m.normalScale.set(ns, ns); }
+  const co = clamp((rig.dist - 600) / 900, 0, 1) * .5;
+  for (const cl of clouds) { cl.position.x += dt * 4; if (cl.position.x > W + 300) cl.position.x = -300; cl.material.opacity = co; cl.visible = co > .01; }
+  if (borderLine) borderLine.visible = rig.dist > 180;
   if (rig.dist > 250 && houseCount) {   // il daireleri
     const k = clamp((rig.dist - 250) / 400, 0, 1);
     for (let p = 0; p < NP; p++) {
       if (PROV_COUNT[p] !== provLast[p]) { provPulse[p] = 1; provLast[p] = PROV_COUNT[p]; }
       provPulse[p] = Math.max(0, provPulse[p] - dt * 3);
       const r = PROV_COUNT[p] ? (4 + Math.sqrt(PROV_COUNT[p]) * 2.1) * (1 + provPulse[p] * .35) * k : 0;
-      _p.set(PROVINCES[p].x, .3, PROVINCES[p].y); _m.compose(_p, QI, _s.set(r || 1e-4, 1, r || 1e-4)); provDots.setMatrixAt(p, _m);
+      _p.set(PROVINCES[p].x, heightAt(PROVINCES[p].x, PROVINCES[p].y) + .6, PROVINCES[p].y); _m.compose(_p, QI, _s.set(r || 1e-4, 1, r || 1e-4)); provDots.setMatrixAt(p, _m);
     }
     provDots.count = NP; provDots.instanceMatrix.needsUpdate = true;
   } else provDots.count = 0;
   for (let i = effects.length - 1; i >= 0; i--) if (!effects[i].update(now)) effects.splice(i, 1);
   applyCam();
+  updateForest();
   if (selected >= 0 && selected < houseCount && !video) {
     const [x, z] = housePos(selected), s = clamp(rig.dist * .045, .9, 30);
     pin.visible = ring.visible = true; pin.position.set(x, .75 * s + Math.sin(now / 260) * .1 * s, z); pin.scale.setScalar(s); pin.rotation.y = now / 900;
