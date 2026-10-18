@@ -1096,7 +1096,7 @@ function fitBox(b, aspect = vw / vh) {
 }
 const turkeyView = () => ({ tx: W / 2, tz: H / 2, dist: fitTurkeyDist(), pitch: TOP, yaw: 0 });
 function resize() {
-  const r = stage.getBoundingClientRect(); vw = r.width; vh = r.height;
+  const r = stage.getBoundingClientRect(); vw = r.width || innerWidth || 1024; vh = r.height || innerHeight || 768;
   const dpr = Math.min(devicePixelRatio || 1, 2);
   renderer.setPixelRatio(dpr); renderer.setSize(vw, vh, false);
   fx.width = Math.round(vw * dpr); fx.height = Math.round(vh * dpr);
@@ -1178,6 +1178,7 @@ function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   for (const [h, t0] of born) { const t = (now - t0) / 480; if (t >= 1) { born.delete(h); houseMatrices(h, 1); } else houseMatrices(h, easeOutBack(Math.max(0, t))); }
   if (rig.orbit) rig.yaw += rig.orbit * dt;
+  if (!Number.isFinite(rig.dist) || !Number.isFinite(rig.tx)) { resize(); Object.assign(rig, turkeyView()); }
   updateCars(dt, now);
   if (rig.dist > 250 && houseCount) {   // il daireleri
     const k = clamp((rig.dist - 250) / 400, 0, 1);
@@ -1694,6 +1695,7 @@ function bindUI() {
     if (e.key === 'Escape') { if (video) exitVideo(); else if (placing) { placing = null; cv.classList.remove('placing'); toast('İptal edildi'); } }
   });
   window.addEventListener('resize', () => { resize(); clampRig(); });
+  new ResizeObserver(() => resize()).observe(stage);
   window.addEventListener('hashchange', () => { const m = location.hash.match(/ev=(\d+)/); if (m) selectHouse(+m[1] - 1); });
 }
 
