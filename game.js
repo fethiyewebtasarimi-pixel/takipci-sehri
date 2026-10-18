@@ -22,7 +22,7 @@ const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
 const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
 const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
 const GW = W / G + 1, GH = H / G + 1;
-const WORLD_VERSION = 3;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const WORLD_VERSION = 4;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
 const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
@@ -100,6 +100,21 @@ const RIDGES = [
 const PEAKS = [[44.3,39.7,22,22],[42.83,38.93,14,14],[42.23,38.65,8,10],[35.45,38.53,15,16],[34.17,38.13,10,11],[29.2,40.07,9,16],[39.8,37.65,4,14],[41.1,40.83,6,10]];
 const pr = r => r.map(p => proj(p[0], p[1]));
 const TR_OUTLINE = pr(TURKEY);
+function meander(pts, seed) {   // nehri hücre ölçeğinde kıvrımlandır (sabit tohum → hep aynı)
+  const q = pr(pts), out = []; let s = 0;
+  for (let i = 1; i < q.length; i++) {
+    const [ax, az] = q[i - 1], [bx, bz] = q[i], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 2.5));
+    const nx = -(bz - az) / L, nz = (bx - ax) / L;
+    for (let k = (i === 1 ? 0 : 1); k <= n; k++) {
+      const t = k / n, end = (i === 1 && k === 0) || (i === q.length - 1 && k === n);
+      const off = end ? 0 : Math.sin((s + t * L) * .09 + seed) * 4.5 + (vnoise((s + t * L) * .03, seed) - .5) * 9;
+      out.push([lerp(ax, bx, t) + nx * off, lerp(az, bz, t) + nz * off]);
+    }
+    s += L;
+  }
+  return out;
+}
+let RIVER_PATHS = null;
 
 // 81 il, plaka sırasıyla: [ad, boylam, enlem, nüfus (100 bin)]
 const PROVINCES = [
@@ -340,7 +355,7 @@ function canvasTexEarly(w, h, draw, repeat, linear) {
 }
 // 3D arazi: 4 hücrede bir köşe, yükseklik + şehir çevresinde düzleşme
 const terrainGeo = new THREE.PlaneGeometry(W, H, GW - 1, GH - 1).rotateX(-Math.PI / 2).translate(W / 2, 0, H / 2);
-const land = new THREE.Mesh(terrainGeo, new THREE.MeshLambertMaterial({ map: landTex, transparent: true, alphaTest: .02 }));
+const land = new THREE.Mesh(terrainGeo, new THREE.MeshLambertMaterial({ map: landTex, alphaMap: null, transparent: true, alphaTest: .02 }));
 land.receiveShadow = true; land.castShadow = true;
 scene.add(land);
 // deniz: kıyıda turkuaz, açıkta lacivert, dalga parıltısı
@@ -528,6 +543,7 @@ const C = { steppe: [196,186,104], east: [136,160,76], se: [204,176,114], med: [
   rock: [140,128,110], snow: [245,247,250], sand: [226,210,165], salt: [238,234,228] };
 const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 function buildLand() {
+  RIVER_PATHS = RIVERS.map(([pts, wd], i) => [meander(pts, i * 7.3 + 1), wd]);
   // maskeler
   const outer = new Uint8Array(W * H), sea = new Uint8Array(W * H), salt = new Uint8Array(W * H);
   fillRings([TURKEY, ...TR_ISLANDS].map(pr), outer);
@@ -539,8 +555,7 @@ function buildLand() {
     if (salt[c] && LAND[c]) { LAND[c] = 0; KIND[c] = 3; }
     else KIND[c] = LAND[c] ? 1 : (!outer[c] && !sea[c]) ? 2 : 0;
   }
-  for (const [pts, wd] of RIVERS) {   // nehirler: Türkiye içinde su
-    const P_ = pr(pts);
+  for (const [P_, wd] of RIVER_PATHS) {   // nehirler: Türkiye içinde su
     for (let i = 1; i < P_.length; i++) {
       const [ax, az] = P_[i - 1], [bx, bz] = P_[i], r = wd / 2;
       for (let z = Math.floor(Math.min(az, bz) - r); z <= Math.max(az, bz) + r; z++) for (let x = Math.floor(Math.min(ax, bx) - r); x <= Math.max(ax, bx) + r; x++) {
@@ -560,6 +575,9 @@ function buildLand() {
     if (k === 0 && !inner) { if (lat > 41.05 && lon > 27.9 && lon < 41.8) black[i] = 1; else med[i] = 1; }
   }
   const dW = chamfer(water), dB = chamfer(black), dM = chamfer(med);
+  const trC = new Uint8Array(GW * GH); for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) trC[iy * GW + ix] = kAt(ix, iy) === 1 || kAt(ix, iy) === 3;
+  const dT = chamfer(trC); NFADE = new Float32Array(GW * GH);
+  for (let i = 0; i < GW * GH; i++) NFADE[i] = sm(46, 12, dT[i]);
   dL = chamfer(water.map(v => v ? 0 : 1));
   const RP = RIDGES.map(([pts, h, w]) => { const q = pr(pts); const xs = q.map(p => p[0]), zs = q.map(p => p[1]);
     return { q, h, w, x0: Math.min(...xs) - w * 3, x1: Math.max(...xs) + w * 3, z0: Math.min(...zs) - w * 3, z1: Math.max(...zs) + w * 3 }; });
@@ -574,7 +592,7 @@ function buildLand() {
     const plateau = 1.4 * sm(36.7, 37.6, lat) * sm(41.6, 40.6, lat) * sm(29.5, 31, lon) + 2.8 * sm(38, 41, lon) * sm(42.6, 41.4, lat);
     h = h * (.45 + .9 * rug) + pk + plateau * (.8 + .4 * det) + .8 * det;
     const edge = Math.min(x, W - x, z, H - z);
-    h *= sm(0, 5, dW[i]) * (k === 2 ? sm(20, 140, edge) : 1);
+    h *= sm(0, 5, dW[i]) * (k === 2 ? NFADE[i] : 1);
     const hRaw = water[i] ? 0 : Math.max(0, h); H0[i] = hRaw * 2.1;
     // bölge rengi
     const db = dB[i] * G, dm = dM[i] * G;
@@ -592,7 +610,7 @@ function buildLand() {
   const sctx = seaCanvas.getContext('2d'), simg = sctx.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) { const t = dL[i], ex = (i % GW) * G, ez = ((i / GW) | 0) * G, edge = Math.min(ex, W - ex, ez, H - ez);
     let c = mixc([96, 206, 214], mixc([58, 160, 205], [36, 100, 160], sm(4, 30, t)), sm(.5, 3, t));
-    c = mixc([36, 100, 160], c, sm(30, 160, edge));
+    c = mixc([36, 100, 160], c, Math.min(sm(30, 160, edge), sm(58, 22, dT[i])));
     simg.data[i * 4] = c[0]; simg.data[i * 4 + 1] = c[1]; simg.data[i * 4 + 2] = c[2]; simg.data[i * 4 + 3] = 255; }
   sctx.putImageData(simg, 0, 0); seaColTex.needsUpdate = true;
   // hücre renkleri
@@ -608,10 +626,11 @@ function buildLand() {
         if (k === 3) v = C.salt[ch];
         BASE0[c * 3 + ch] = v * nz;
       }
-      const edge = Math.min(x, W - x, z, H - z);
-      BASE[c * 4 + 3] = k === 2 ? 255 * sm(20, 140, edge) : 255;
     }
   }
+  // su hücrelerine kıyı rengi ver (yumuşak kenarda siyah halka olmasın)
+  for (let c = 0; c < W * H; c++) if (KIND[c] === 0) { BASE0[c * 3] = 214; BASE0[c * 3 + 1] = 204; BASE0[c * 3 + 2] = 160; }
+  buildAlpha(); land.material.alphaMap = alphaTex; land.material.needsUpdate = true;
   restoreBase();
   updateTerrain(0, 0, GW - 1, GH - 1);
   // Türkiye sınır çizgisi (arazinin üstünden)
@@ -626,9 +645,27 @@ function buildLand() {
   borderLine = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: .5, fog: false }));
   scene.add(borderLine);
 }
-let dL = null;
+let dL = null, NFADE = null;
+// Pürüzsüz kıyı: Türkiye kenar yumuşatmalı (anti-aliased) çizilir, komşular uzaklaştıkça solar
+const alphaCanvas = document.createElement('canvas'); alphaCanvas.width = W; alphaCanvas.height = H;
+const alphaTex = new THREE.CanvasTexture(alphaCanvas);
+function buildAlpha() {
+  const g = alphaCanvas.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  const path = rings => { g.beginPath(); for (const r of rings) { r.forEach(([x, z], i) => i ? g.lineTo(x, z) : g.moveTo(x, z)); g.closePath(); } };
+  g.fillStyle = '#fff'; path([TURKEY, ...TR_ISLANDS, MARMARA, MARMARA_ADA, ...LAKES].map(pr)); g.fill('evenodd');
+  g.globalCompositeOperation = 'destination-out'; g.lineCap = g.lineJoin = 'round';
+  for (const [P_, wd] of RIVER_PATHS) { g.lineWidth = wd; g.beginPath(); P_.forEach(([x, z], i) => i ? g.lineTo(x + .0, z) : g.moveTo(x, z)); g.stroke(); }
+  g.globalCompositeOperation = 'source-over';
+  const img = g.getImageData(0, 0, W, H), d = img.data;
+  for (let z = 0; z < H; z++) { const iy = Math.min(GH - 1, Math.round(z / G));
+    for (let x = 0; x < W; x++) { const c = z * W + x; if (KIND[c] !== 2) continue;
+      const a = 255 * NFADE[iy * GW + Math.min(GW - 1, Math.round(x / G))], i = c * 4;
+      if (a > d[i]) d[i] = d[i + 1] = d[i + 2] = a; } }
+  g.putImageData(img, 0, 0); alphaTex.needsUpdate = true;
+}
 function restoreBase() {
-  for (let c = 0; c < W * H; c++) { BASE[c * 4] = BASE0[c * 3]; BASE[c * 4 + 1] = BASE0[c * 3 + 1]; BASE[c * 4 + 2] = BASE0[c * 3 + 2]; if (KIND[c] === 1 || KIND[c] === 3) BASE[c * 4 + 3] = 255; }
+  for (let c = 0; c < W * H; c++) { BASE[c * 4] = BASE0[c * 3]; BASE[c * 4 + 1] = BASE0[c * 3 + 1]; BASE[c * 4 + 2] = BASE0[c * 3 + 2]; BASE[c * 4 + 3] = 255; }
 }
 const terrY = i => H0[i] * FG[i];
 function updateTerrain(ix0, iy0, ix1, iy1) {
