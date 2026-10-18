@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Takipçi Şehri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Space+Mono:wght@400;700&family=Baloo+2:wght@800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:rgba(255,255,255,.94);--ink:#1d2433;--muted:#5d6678;--line:rgba(20,30,50,.12);
+  --accent:#ff5a3c;--accent2:#2f80ed;--ok:#27ae60;--shadow:0 8px 30px rgba(10,20,40,.22);
+  --chip:#f1f3f7;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--panel:rgba(22,27,38,.94);--ink:#eef2f8;--muted:#9aa4b6;--line:rgba(255,255,255,.12);--chip:#2a3142}
+}
+:root[data-theme="dark"]{--panel:rgba(22,27,38,.94);--ink:#eef2f8;--muted:#9aa4b6;--line:rgba(255,255,255,.12);--chip:#2a3142}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1420;font-family:Nunito,system-ui,sans-serif;color:var(--ink)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+
+#stage{position:fixed;inset:0;container-type:size;overflow:hidden;background:linear-gradient(180deg,#5f6468 0%,#8d918f 22%,#c3c6be 46%,#c3c6be 100%)}
+#fx,#labels{position:absolute;inset:0;pointer-events:none}
+#fx{width:100%;height:100%}
+.lbl{position:absolute;left:0;top:0;white-space:nowrap;font:800 12px Nunito,sans-serif;color:#fff;pointer-events:none;will-change:transform;text-shadow:0 1px 2px rgba(0,0,0,.7),0 0 6px rgba(0,0,0,.4)}
+.lbl.city{font-size:13px;font-weight:900}
+.lbl.own{background:rgba(20,26,36,.82);padding:2px 7px;border-radius:99px;text-shadow:none;font-size:11px}
+.lbl.sel{background:#ff3d5a;padding:3px 9px;border-radius:99px;text-shadow:none;font-size:12px}
+.lbl.bld{background:#ffd23f;color:#1d2433;padding:2px 8px;border-radius:7px;text-shadow:none}
+.lbl.mah{font:700 italic 14px Nunito,sans-serif;opacity:.9;letter-spacing:.02em}
+#stage.frame916{inset:auto;top:50%;left:50%;height:100vh;width:calc(100vh * 9 / 16);max-width:100vw;transform:translate(-50%,-50%);box-shadow:0 0 0 100vmax #05080d}
+#c{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#c.placing{cursor:crosshair}
+
+/* ---------- arayüz ---------- */
+.panel{background:var(--panel);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.brand{position:fixed;top:12px;left:12px;display:flex;align-items:center;gap:10px;padding:8px 14px 8px 8px}
+.brand .logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#ff7a45,#ff3d5a);display:grid;place-items:center;font-size:20px}
+.brand b{display:block;font-weight:900;font-size:16px;line-height:1.1}
+.brand span{font-size:12px;color:var(--muted);font-weight:700}
+
+.search{position:fixed;top:12px;left:50%;transform:translateX(-50%);width:min(420px,calc(100vw - 24px));z-index:5}
+.search input{width:100%;padding:13px 16px 13px 42px;border-radius:14px;border:1px solid var(--line);background:var(--panel);box-shadow:var(--shadow);outline:none;font-weight:700;font-size:15px}
+.search input:focus{border-color:var(--accent2)}
+.search .ico{position:absolute;left:14px;top:12px;font-size:17px;pointer-events:none}
+#results{margin-top:6px;overflow:hidden}
+#results:empty{display:none}
+.res{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.res:last-child{border-bottom:0}
+.res:hover,.res.on{background:var(--chip)}
+.res .dot{width:26px;height:26px;border-radius:8px;flex:none}
+.res b{display:block;font-size:14px}
+.res small{color:var(--muted);font-weight:700}
+
+.stats{position:fixed;left:12px;bottom:12px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:6px 14px;font-weight:800;font-size:13px;max-width:calc(100vw - 90px)}
+.stats .muted{color:var(--muted)}
+.zoom{position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel);box-shadow:var(--shadow);font-weight:900;font-size:18px}
+
+.card{position:fixed;left:12px;top:78px;width:min(330px,calc(100vw - 24px));padding:16px;z-index:6}
+.card .x{position:absolute;right:10px;top:10px;border:0;background:var(--chip);width:30px;height:30px;border-radius:9px;font-weight:900}
+.card-h{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.card-h .roof{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:24px}
+.card .t{font-weight:900;font-size:19px}
+.card .o{font-weight:800;color:var(--accent2)}
+.card .o.none{color:var(--muted)}
+.addr{font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px}
+.claim{background:#fff6d6;color:#6b5200;border-radius:12px;padding:10px 12px;font-size:13px;font-weight:700;margin-bottom:12px}
+.nb-title{font-size:12px;font-weight:900;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}
+.nb{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px}
+.nb button{border:1px solid var(--line);background:var(--chip);border-radius:10px;padding:8px;font-weight:800;font-size:12px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nb button:disabled{opacity:.4;cursor:default}
+.btn{border:0;border-radius:11px;padding:10px 14px;font-weight:900;background:var(--accent2);color:#fff;width:100%}
+.btn.alt{background:var(--chip);color:var(--ink);border:1px solid var(--line)}
+.btn.red{background:#e74c3c}
+.btn.go{background:linear-gradient(135deg,#ff7a45,#ff3d5a)}
+.row{display:flex;gap:6px}
+.row>*{flex:1}
+
+/* ---------- yönetici paneli ---------- */
+#admin{position:fixed;right:12px;top:12px;bottom:72px;width:330px;overflow:auto;padding:14px;z-index:7}
+#admin.min{bottom:auto;overflow:hidden}
+#admin.min .body{display:none}
+#admin h3{margin:0;font-weight:900;font-size:16px;display:flex;justify-content:space-between;align-items:center}
+#admin h4{margin:16px 0 6px;font-size:12px;letter-spacing:.08em;color:var(--muted);font-weight:900}
+#admin label{display:block;font-size:12px;font-weight:800;color:var(--muted);margin:8px 0 3px}
+#admin input,#admin select,#admin textarea{width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--chip);outline:none;font-weight:700}
+#admin textarea{min-height:80px;resize:vertical;font-size:13px}
+#admin .btn{margin-top:6px}
+#admin .hint{font-size:12px;color:var(--muted);font-weight:700;margin-top:4px}
+#admin .list{font-size:12px;font-weight:700}
+#admin .list div{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);gap:6px}
+#admin .list button{border:0;background:var(--chip);border-radius:7px;padding:3px 8px;font-weight:900}
+.chk{display:flex!important;align-items:center;gap:8px;color:var(--ink)!important;font-size:13px!important}
+.chk input{width:auto!important}
+.adm-toggle{border:0;background:var(--chip);border-radius:8px;padding:4px 10px;font-weight:900}
+
+.step{border:1px solid var(--line);border-radius:14px;padding:12px;margin-top:12px}
+.step-h{font-weight:900;font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.step-h span{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#ff7a45,#ff3d5a);color:#fff;display:grid;place-items:center;font-size:13px}
+.tabs{display:flex;gap:4px;margin-bottom:8px}
+.tab{flex:1;border:1px solid var(--line);background:var(--chip);border-radius:9px;padding:7px;font-weight:800;font-size:12px}
+.tab.on{background:var(--accent2);color:#fff;border-color:transparent}
+.tabp>*{margin-top:6px}
+.pending{margin-top:10px;background:var(--chip);border-radius:11px;padding:10px;font-size:13px;font-weight:700}
+.pending b{font-size:16px}
+.pending .top{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin-top:6px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:default}
+.adv{margin-top:12px}
+.adv summary{cursor:pointer;font-weight:800;color:var(--muted);font-size:13px;padding:6px 0}
+code{background:var(--chip);padding:1px 5px;border-radius:5px;font-size:11px}
+.lbl.prov{background:rgba(20,26,36,.82);padding:3px 9px;border-radius:99px;text-shadow:none;font-size:12px}
+.lbl.prov b{color:#ffd23f;margin-left:4px}
+#toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);background:#1d2433;color:#fff;padding:10px 16px;border-radius:12px;font-weight:800;opacity:0;transition:.3s;pointer-events:none;z-index:20;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#loading{position:fixed;inset:0;display:grid;place-items:center;background:#0d1420;color:#fff;font-weight:900;font-size:20px;z-index:30}
+
+/* ---------- video modu ---------- */
+body.video #ui{display:none}
+#vo{position:absolute;inset:0;pointer-events:none;color:#fff;text-align:center;font-family:Nunito,sans-serif}
+#vo[hidden]{display:none}
+.cor{position:absolute;width:5cqmin;height:5cqmin;border:2px solid rgba(255,255,255,.75)}
+.cor.tl{top:2.5cqmin;left:2.5cqmin;border-right:0;border-bottom:0}.cor.tr{top:2.5cqmin;right:2.5cqmin;border-left:0;border-bottom:0}
+.cor.bl{bottom:2.5cqmin;left:2.5cqmin;border-right:0;border-top:0}.cor.br{bottom:2.5cqmin;right:2.5cqmin;border-left:0;border-top:0}
+.vo-tag{position:absolute;top:4cqmin;font-family:"Space Mono",ui-monospace,monospace;font-size:max(11px,2.6cqmin);opacity:.85;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+.vo-tag.l{left:5.5cqmin}.vo-tag.r{right:5.5cqmin}
+.vo-count{position:absolute;top:8cqh;left:0;right:0;font-family:"Space Mono",ui-monospace,monospace;font-weight:700;font-size:max(30px,10cqmin);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:0 .25em;line-height:1;text-shadow:0 .05em 0 rgba(0,0,0,.35),0 0 .4em rgba(0,0,0,.35);font-variant-numeric:tabular-nums;transition:opacity .4s}
+.ico{display:inline-flex;align-items:center;gap:.15em;font-size:.55em}
+.ico svg{height:1em;width:auto;filter:drop-shadow(0 .04em .06em rgba(0,0,0,.45))}
+.ico i{font-style:normal;font-size:.8em;opacity:.95}
+.vo-count small{flex-basis:100%;font-weight:400;font-size:.27em;margin-top:.5em;opacity:.95}
+.vo-intro{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2cqmin;font-weight:900;text-shadow:0 .06em 0 rgba(0,0,0,.4);opacity:0;transform:scale(.85);transition:.45s}
+.vo-intro.show{opacity:1;transform:none}
+.vo-intro b{font-family:Nunito,sans-serif;font-weight:900;font-size:max(44px,18cqmin);-webkit-text-stroke:.035em #111;paint-order:stroke fill;line-height:1}
+.vo-intro .ico{font-size:max(30px,12cqmin);gap:.35em}
+.vo-intro .ico>*{opacity:0;transform:scale(.3);transition:.35s cubic-bezier(.2,1.6,.4,1)}
+.vo-intro.s1 .ico>:nth-child(1),.vo-intro.s2 .ico>:nth-child(-n+2),.vo-intro.s3 .ico>*{opacity:1;transform:none}
+.vo-intro svg{stroke:#111;stroke-width:1.6px;paint-order:stroke}
+.vo-cap{position:absolute;left:4%;right:4%;top:66%;font-family:"Baloo 2",Nunito,sans-serif;font-weight:800;line-height:1.05;letter-spacing:.01em;font-size:max(18px,5.6cqmin);text-transform:uppercase;line-height:1.15;text-shadow:-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000,2px 2px 0 #000,0 3px 6px rgba(0,0,0,.6);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s}
+.vo-cap.show{opacity:1;transform:none}
+.vo-banner{position:absolute;left:50%;top:29%;transform:translate(-50%,-50%) scale(0);background:#ffd23f;color:#1d2433;font-weight:900;font-size:max(20px,7cqmin);padding:.3em .8em;border-radius:.45em;box-shadow:0 .12em 0 #c9a21f,0 .4em .8em rgba(0,0,0,.4);transition:transform .45s cubic-bezier(.2,1.6,.4,1);white-space:nowrap}
+.vo-banner.show{transform:translate(-50%,-50%) scale(1) rotate(-3deg)}
+.vo-cta{position:absolute;top:8cqh;left:6%;right:6%;font-weight:900;font-size:max(26px,9.5cqmin);opacity:0;transform:translateY(-14px);transition:.45s;line-height:1.05;text-shadow:0 .05em 0 rgba(0,0,0,.35),0 0 .4em rgba(0,0,0,.4)}
+.vo-cta small{display:inline-block;margin-top:.45em;font-family:"Space Mono",ui-monospace,monospace;font-weight:400;font-size:.27em;background:rgba(0,0,0,.55);padding:.4em 1em;border-radius:99px;text-shadow:none}
+.vo-cta.show{opacity:1;transform:none}
+#voExit{position:absolute;right:10px;top:10px;pointer-events:auto;opacity:0;border:0;border-radius:10px;background:rgba(0,0,0,.6);color:#fff;font-weight:900;padding:8px 12px;transition:.2s}
+#voExit:hover{opacity:1}
+
+@media (max-width:760px){
+  .brand{display:none}
+  .card{top:auto;bottom:70px;left:12px}
+  .stats{font-size:12px}
+  #admin{left:12px;right:12px;width:auto;top:70px}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <canvas id="fx"></canvas>
+  <div id="labels"></div>
+  <div id="vo" hidden>
+    <i class="cor tl"></i><i class="cor tr"></i><i class="cor bl"></i><i class="cor br"></i>
+    <div class="vo-tag l" id="voHandle"></div><div class="vo-tag r" id="voDay"></div>
+    <div class="vo-count" id="voCount"><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="4.6" fill="#fff"/><path d="M3.5 22c0-5 3.8-8.2 8.5-8.2s8.5 3.2 8.5 8.2z" fill="#fff"/></svg><i>=</i><svg viewBox="0 0 34 24"><path d="M3 9 17 3l14 6-14 6z" fill="#f4f5f7"/><path d="M3 9v9l14 6v-9z" fill="#c9ced6"/><path d="M31 9v9l-14 6v-9z" fill="#e3e6ea"/><rect x="21" y="15" width="3" height="5" fill="#3a4049" transform="skewY(-23)" transform-origin="21 15"/><rect x="8" y="13" width="4" height="3" fill="#3a4049" transform="skewY(23)" transform-origin="8 13"/></svg></span><span id="voNum">0</span><small id="voSub"></small></div>
+    <div class="vo-intro" id="voIntro"><b id="voIntroDay">GÜN 1</b><span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="7.5" r="4.6" fill="#fff"/><path d="M3.5 22c0-5 3.8-8.2 8.5-8.2s8.5 3.2 8.5 8.2z" fill="#fff"/></svg><i>=</i><svg viewBox="0 0 34 24"><path d="M3 9 17 3l14 6-14 6z" fill="#f4f5f7"/><path d="M3 9v9l14 6v-9z" fill="#c9ced6"/><path d="M31 9v9l-14 6v-9z" fill="#e3e6ea"/><rect x="21" y="15" width="3" height="5" fill="#3a4049" transform="skewY(-23)" transform-origin="21 15"/><rect x="8" y="13" width="4" height="3" fill="#3a4049" transform="skewY(23)" transform-origin="8 13"/></svg></span></div>
+    <div class="vo-banner" id="voBanner"></div>
+    <div class="vo-cap" id="voCap"></div>
+    <div class="vo-cta" id="voCta"></div>
+    <button id="voExit">✕ Çık (Esc)</button>
+  </div>
+</div>
+
+<div id="loading">🇹🇷 Türkiye haritası çiziliyor…</div>
+
+<div id="ui">
+  <header class="brand panel">
+    <div class="logo">🏙️</div>
+    <div><b id="brandTitle">Takipçi Şehri</b><span id="brandHandle">Her takipçiye bir ev</span></div>
+  </header>
+
+  <div class="search">
+    <span class="ico">🔎</span>
+    <input id="q" placeholder="Kullanıcı adı veya ev no ara…" autocomplete="off" spellcheck="false">
+    <div id="results" class="panel"></div>
+  </div>
+
+  <div class="stats panel" id="stats"></div>
+
+  <div class="zoom">
+    <button id="zIn" title="Yakınlaştır">+</button>
+    <button id="zOut" title="Uzaklaştır">−</button>
+    <button id="zTr" title="Tüm Türkiye">🇹🇷</button>
+    <button id="zCity" title="Şehre git">🏠</button>
+  </div>
+
+  <div class="card panel" id="card" hidden></div>
+
+  <div id="admin" class="panel" hidden>
+    <h3>🛠️ Yönetim <button class="adm-toggle" id="admMin">—</button></h3>
+    <div class="body">
+
+      <div class="step">
+        <div class="step-h"><span>1</span> Yorumları getir</div>
+        <div class="tabs"><button class="tab on" data-tab="ig">Instagram</button><button class="tab" data-tab="file">Dosya</button><button class="tab" data-tab="demo">Deneme</button></div>
+        <div class="tabp" data-p="ig">
+          <input id="igToken" type="password" placeholder="Instagram erişim anahtarı (token)" autocomplete="off">
+          <button class="btn alt" id="igPosts">Gönderilerimi getir</button>
+          <select id="igPost" hidden></select>
+          <button class="btn" id="igFetch" hidden>Yorumları çek</button>
+          <div class="hint">Anahtar sadece bu tarayıcıda kalır, siteye yüklenmez. Nasıl alınır: README'ye bak.</div>
+        </div>
+        <div class="tabp" data-p="file" hidden>
+          <button class="btn alt" id="cFileBtn">📄 CSV / JSON / TXT seç</button>
+          <input type="file" id="cFile" accept=".csv,.json,.txt" hidden>
+          <div class="hint">Her satırda kullanıcı adı ve yorum olsun. Örn: <code>ahmet.yilmaz, İzmir'denim</code></div>
+        </div>
+        <div class="tabp" data-p="demo" hidden>
+          <div class="row"><input id="demoN" type="number" value="3000" min="10"><button class="btn alt" id="demoGo" style="flex:none;width:auto">Sahte yorum üret</button></div>
+          <div class="hint">Gerçek yorum gibi rastgele kullanıcılar ve iller. Sadece denemek için.</div>
+        </div>
+        <div id="pending" class="pending" hidden></div>
+      </div>
+
+      <div class="step">
+        <div class="step-h"><span>2</span> Videoyu oynat</div>
+        <label class="chk"><input type="checkbox" id="aFrame" checked> Telefon ekranı (9:16)</label>
+        <button class="btn go" id="pPlay" disabled>🎬 Evleri kur ve videoyu oynat</button>
+        <div class="hint">Önce ekran kaydını başlat. Video bitince Esc.</div>
+      </div>
+
+      <div class="step">
+        <div class="step-h"><span>3</span> Siteyi güncelle</div>
+        <button class="btn alt" id="aExport">💾 data.json indir</button>
+        <div class="hint">Bu dosyayı siteye yükleyince herkes kendi evini görür.</div>
+      </div>
+
+      <details class="adv">
+        <summary>Gelişmiş ayarlar</summary>
+        <label>Instagram kullanıcı adın</label>
+        <input id="aHandle" placeholder="ornek_hesap">
+        <label>Şehrin adı (videoda yazar)</label>
+        <input id="aTown" placeholder="takipçi şehri">
+        <label>İl yazmayanların evi nereye kurulsun?</label>
+        <select id="aSeed"></select>
+        <label class="chk"><input type="checkbox" id="aNoProv"> İl yazmayanlara da ev kur</label>
+        <label>Altyazılar (her satır bir sahne · {fark} {sayi} {il} {top} {gun})</label>
+        <textarea id="aCaps"></textarea>
+        <label>Kapanış sorusu</label>
+        <input id="aCta" placeholder="senin ilin kaçıncı?">
+        <label class="chk"><input type="checkbox" id="aSound" checked> Ses efektleri</label>
+
+        <h4>TAKİPÇİ SAYISIYLA EKLE (eski yöntem)</h4>
+        <div class="row"><input id="aCount" type="number" min="0" placeholder="ör. 1250"><button class="btn alt" id="aPlay" style="flex:none;width:auto">🎬</button><button class="btn alt" id="aSilent" style="flex:none;width:auto">Sessiz</button></div>
+        <button class="btn alt" id="aIntro">🎥 Sadece Türkiye zoom'u</button>
+
+        <h4>YAPI EKLE</h4>
+        <select id="aBType"></select>
+        <button class="btn" id="aPlace">📍 Haritaya yerleştir</button>
+        <div class="list" id="aBList"></div>
+
+        <h4>ETKİNLİKLER</h4>
+        <div id="aEvents" class="row" style="flex-wrap:wrap"></div>
+
+        <h4>EV SAHİBİ ELLE EKLE</h4>
+        <textarea id="aOwners" placeholder="Her satıra: kullanıcı_adı il&#10;ahmet.yilmaz izmir"></textarea>
+        <button class="btn" id="aAssign">Ekle</button>
+        <div class="hint" id="aOwnerInfo"></div>
+
+        <h4>VERİ</h4>
+        <div class="row"><button class="btn alt" id="aImport">⬆️ data.json yükle</button><button class="btn red" id="aReset">Sıfırla</button></div>
+        <input type="file" id="aFile" accept=".json,application/json" hidden>
+        <h4>GEÇMİŞ</h4>
+        <div class="list" id="aHistory"></div>
+      </details>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>
