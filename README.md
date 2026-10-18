@@ -35,8 +35,12 @@ Anahtar sadece bu tarayıcıda kalır, data.json'a yazılmaz. Meta'nın ekran ad
 Instagram bağlantısı çalışmazsa yorumları bir dışa aktarma aracıyla CSV olarak alıp **Dosya** sekmesinden yükle.
 
 ## Yayına alma
-`index.html` + `game.js` + `data.json` (+ varsa `models/`) herhangi bir statik hostinge
-(Netlify, Vercel, GitHub Pages) yüklenir. Her video sonrası data.json güncellenir.
+Canlı site: https://fethiyewebtasarimi-pixel.github.io/takipci-sehri/
+Yönetim: https://fethiyewebtasarimi-pixel.github.io/takipci-sehri/?admin
+
+GitHub Pages, `main` dalından yayınlar. Güncellemek için yeni `data.json`'u (ve değişen dosyaları)
+depoya gönder; site 1 dakika içinde yenilenir. Yönetim sayfasını açan herkes sadece kendi
+tarayıcısında değişiklik yapabilir; herkesin gördüğü şehir yalnızca depodaki `data.json`'dur.
 
 ## Yeni şey eklemek (game.js)
 - Yeni yapı: `BUILDINGS` objesine giriş ekle (w, h, build → THREE.Group). Panel listesine kendiliğinden gelir.
