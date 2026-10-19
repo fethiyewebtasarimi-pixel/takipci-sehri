@@ -22,7 +22,7 @@ const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
 const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
 const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
 const GW = W / G + 1, GH = H / G + 1;
-const WORLD_VERSION = 8;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const WORLD_VERSION = 9;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
 const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
@@ -156,6 +156,12 @@ function meander(pts, seed) {   // nehri hücre ölçeğinde kıvrımlandır (sa
   return out;
 }
 let RIVER_PATHS = null;
+// Boğazlar: Karadeniz - Marmara - Ege su yolu (gerçeğinden biraz geniş, görünsün diye)
+const STRAITS = [
+  [[[28.99,40.99],[29.01,41.03],[29.04,41.07],[29.06,41.11],[29.05,41.15],[29.08,41.19],[29.13,41.26],[29.16,41.31]], 3.2],   // İstanbul Boğazı
+  [[[26.72,40.43],[26.60,40.33],[26.45,40.22],[26.40,40.15],[26.33,40.08],[26.22,40.03],[26.05,39.97]], 4.2],               // Çanakkale Boğazı
+];
+const STRAIT_PATHS = STRAITS.map(([pts, wd]) => [pr(pts), wd]);
 
 // 81 il, plaka sırasıyla: [ad, boylam, enlem, nüfus (100 bin)]
 const PROVINCES = [
@@ -465,6 +471,8 @@ function buildWorldBack() {
   fillPolys([BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, RED_SEA, ...WORLD_LAKES, MARMARA, ...LAKES], '#000', 'nonzero');
   fillPolys([...FOREIGN_ISLANDS, MARMARA_ADA, ...TR_ISLANDS], '#fff', 'nonzero');
   g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
+  for (const [P_, wd] of STRAIT_PATHS) { g.lineWidth = wd / sx; g.beginPath(); P_.forEach(([x, z], i) => { const X = (x - wbX0) / sx, Z = (z - wbZ0) / sz; i ? g.lineTo(X, Z) : g.moveTo(X, Z); }); g.stroke(); }
+  g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
   const mask = g.getImageData(0, 0, cw, ch).data;
   // kabaca yükseklik (gölge için) — çeyrek çözünürlük
   const qw = cw >> 2, qh = ch >> 2, HQ = new Float32Array(qw * qh);
@@ -674,6 +682,15 @@ function buildLand() {
       }
     }
   }
+  for (const [P_, wd] of STRAIT_PATHS) {   // boğazlar: deniz suyu (Trakya ile Anadolu ayrılır)
+    for (let i = 1; i < P_.length; i++) {
+      const [ax, az] = P_[i - 1], [bx, bz] = P_[i], r = wd / 2;
+      for (let z = Math.floor(Math.min(az, bz) - r); z <= Math.max(az, bz) + r; z++) for (let x = Math.floor(Math.min(ax, bx) - r); x <= Math.max(ax, bx) + r; x++) {
+        if (x < 0 || z < 0 || x >= W || z >= H) continue;
+        const c = z * W + x; if (distToPoly([[ax, az], [bx, bz]], x + .5, z + .5) < r) { LAND[c] = 0; KIND[c] = 0; }
+      }
+    }
+  }
   // kaba ızgara alanları
   const kAt = (ix, iy) => KIND[Math.min(H - 1, iy * G) * W + Math.min(W - 1, ix * G)];
   const water = new Uint8Array(GW * GH), black = new Uint8Array(GW * GH), med = new Uint8Array(GW * GH);
@@ -682,6 +699,10 @@ function buildLand() {
     const inner = outer[Math.min(H - 1, iy * G) * W + Math.min(W - 1, ix * G)];
     water[i] = k === 0 || k === 3;
     if (k === 0 && !inner) { if (lat > 41.05 && lon > 27.9 && lon < 41.8) black[i] = 1; else med[i] = 1; }
+  }
+  for (const [P_, wd] of STRAIT_PATHS) for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) {   // boğaz kenarında arazi alçalsın
+    const x = ix * G, z = iy * G; if (x < Math.min(...P_.map(p => p[0])) - 12 || x > Math.max(...P_.map(p => p[0])) + 12) continue;
+    if (distToPoly(P_, x, z) < wd / 2 + 2.5) water[iy * GW + ix] = 1;
   }
   const dW = chamfer(water), dB = chamfer(black), dM = chamfer(med);
   const edgeSrc = new Uint8Array(GW * GH); for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) edgeSrc[iy * GW + ix] = water[iy * GW + ix] || kAt(ix, iy) === 2;
@@ -817,6 +838,9 @@ function buildAlpha() {
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
   const path = rings => { g.beginPath(); for (const r of rings) { r.forEach(([x, z], i) => i ? g.lineTo(x, z) : g.moveTo(x, z)); g.closePath(); } };
   g.fillStyle = '#fff'; path([TURKEY, ...TR_ISLANDS, MARMARA, MARMARA_ADA, ...LAKES].map(pr)); g.fill('evenodd');
+  g.globalCompositeOperation = 'destination-out'; g.lineCap = g.lineJoin = 'round';
+  for (const [P_, wd] of STRAIT_PATHS) { g.lineWidth = wd; g.beginPath(); P_.forEach(([x, z], i) => i ? g.lineTo(x, z) : g.moveTo(x, z)); g.stroke(); }
+  g.globalCompositeOperation = 'source-over';
   // Kenar yumuşatmalı maskeden işaretli mesafe alanı (SDF): yakına inince de kıyı pürüzsüz eğri kalır
   const img = g.getImageData(0, 0, W, H), d = img.data, N = W * H, m = new Float32Array(N), dist = new Float32Array(N).fill(1e9);
   for (let c = 0; c < N; c++) m[c] = d[c * 4] / 255;
