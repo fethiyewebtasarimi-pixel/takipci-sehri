@@ -22,7 +22,7 @@ const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
 const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
 const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
 const GW = W / G + 1, GH = H / G + 1;
-const WORLD_VERSION = 7;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const WORLD_VERSION = 8;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
 const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
@@ -46,7 +46,7 @@ const TURKEY_RAW = [
 const MARMARA_RAW = [[26.68,40.4],[27.0,40.62],[27.5,40.97],[28.0,41.0],[28.6,40.97],[29.0,41.02],[29.3,40.85],
   [29.9,40.73],[29.4,40.67],[29.1,40.42],[28.6,40.37],[28.0,40.4],[27.6,40.33],[27.2,40.42],[26.85,40.33]];
 const VAN_RAW = [[42.3,38.65],[42.55,38.9],[42.95,38.97],[43.3,38.85],[43.45,38.55],[43.1,38.38],[42.7,38.45]];
-const TUZ = [[33.2,39.05],[33.45,38.98],[33.6,38.62],[33.42,38.45],[33.25,38.62]];
+const TUZ = fractal([[33.2,39.05],[33.45,38.98],[33.6,38.62],[33.42,38.45],[33.25,38.62]], .3);
 // Kıyıları girintili-çıkıntılı yap (fraktal, sabit tohumlu → hep aynı şekil)
 function fractalSeg(a, b, amp, depth, seed, out) {
   const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
@@ -397,6 +397,18 @@ function canvasTexEarly(w, h, draw, repeat, linear) {
 const terrainGeo = new THREE.PlaneGeometry(W, H, GW - 1, GH - 1).rotateX(-Math.PI / 2).translate(W / 2, 0, H / 2);
 const land = new THREE.Mesh(terrainGeo, new THREE.MeshLambertMaterial({ map: landTex, alphaMap: null, transparent: true, alphaTest: .02 }));
 land.receiveShadow = true; land.castShadow = false;
+{ const per = (x, y, P) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const q = (a, b) => hash2(((a % P) + P) % P + 77, ((b % P) + P) % P + 31);
+    const A = q(xi, yi), B_ = q(xi + 1, yi), C_ = q(xi, yi + 1), D_ = q(xi + 1, yi + 1); return A + (B_ - A) * u + (C_ - A) * v + (A - B_ - C_ + D_) * u * v; };
+  land.material.normalMap = canvasTexEarly(256, 256, (g, w, h) => {
+    const hg = (x, y) => per(x / 32, y / 32, 8) * .5 + per(x / 16, y / 16, 16) * .3 + per(x / 8, y / 8, 32) * .2, img = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const dx = hg((x + 1) % w, y) - hg((x - 1 + w) % w, y), dy = hg(x, (y + 1) % h) - hg(x, (y - 1 + h) % h), nx = -dx * 3, ny = -dy * 3, l = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
+      img.data[i] = (nx / l * .5 + .5) * 255; img.data[i + 1] = (ny / l * .5 + .5) * 255; img.data[i + 2] = (1 / l * .5 + .5) * 255; img.data[i + 3] = 255; }
+    g.putImageData(img, 0, 0);
+  }, [W / 10, H / 10], true);
+  land.material.normalScale = new THREE.Vector2(.35, .35);
+}
 scene.add(land);
 // deniz: kıyıda turkuaz, açıkta lacivert, dalga parıltısı
 const seaNormal = canvasTexEarly(256, 256, (g, w, h) => {
@@ -452,7 +464,6 @@ function buildWorldBack() {
   fillPolys([BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, ...WORLD_LAKES, MARMARA, ...LAKES], '#000', 'nonzero');
   fillPolys([...FOREIGN_ISLANDS, MARMARA_ADA, ...TR_ISLANDS], '#fff', 'nonzero');
   g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
-  for (const [P_, wd] of RIVER_PATHS) { g.lineWidth = wd / sx; g.beginPath(); P_.forEach(([x, z], i) => { const X = (x - wbX0) / sx, Z = (z - wbZ0) / sz; i ? g.lineTo(X, Z) : g.moveTo(X, Z); }); g.stroke(); }
   const mask = g.getImageData(0, 0, cw, ch).data;
   // kabaca yükseklik (gölge için) — çeyrek çözünürlük
   const qw = cw >> 2, qh = ch >> 2, HQ = new Float32Array(qw * qh);
@@ -686,7 +697,7 @@ function buildLand() {
     let h = 0;
     for (const r of RP) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) { const d = distToPoly(r.q, x, z); h += r.h * Math.exp(-((d / r.w) ** 2)); }
     let pk = 0; for (const p of PK) pk = Math.max(pk, p.h * Math.exp(-((Math.hypot(x - p.x, z - p.z) / p.w) ** 2)));
-    const rug = 1 - Math.abs(2 * vnoise(x * .035, z * .035) - 1), det = fbm(x * .015, z * .015);
+    const rug = 1 - Math.abs(2 * vnoise(x * .028, z * .028) - 1), det = fbm(x * .014, z * .014);
     const plateau = 1.4 * sm(36.7, 37.6, lat) * sm(41.6, 40.6, lat) * sm(29.5, 31, lon) + 2.8 * sm(38, 41, lon) * sm(42.6, 41.4, lat);
     h = h * (.45 + .9 * rug) + pk + plateau * (.8 + .4 * det) + .8 * det;
     const edge = Math.min(x, W - x, z, H - z);
@@ -706,6 +717,13 @@ function buildLand() {
     COL[i * 3] = col[0]; COL[i * 3 + 1] = col[1]; COL[i * 3 + 2] = col[2];
     DENS[i] = k === 3 || water[i] ? 0 : (.035 + .6 * wB * (1 - rock) + .32 * wM * sm(1, 5, hRaw) * (1 - rock) + .06 * wE) * (1 - snow) * (k === 2 ? .5 : 1);
     ROUNDF[i] = wB * .65;
+  }
+  { // yükseklikleri yumuşat (basamaklı dağ görüntüsü olmasın)
+    for (let pass = 0; pass < 1; pass++) { const o = new Float32Array(H0.length);
+      for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) { const i = iy * GW + ix; if (water[i]) continue; let a = 0, n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = ix + dx, Y = iy + dy; if (X < 0 || Y < 0 || X >= GW || Y >= GH) continue; const w = dx || dy ? 1 : 2; a += H0[Y * GW + X] * w; n += w; }
+        o[i] = a / n; }
+      H0.set(o); }
   }
   // tepeden ışık gelen haritalardaki gibi dağ gölgesi (kabartma)
   const SH = new Float32Array(GW * GH), Lx = -.55, Ly = .72, Lz = -.42, Ll = Math.hypot(Lx, Ly, Lz);
@@ -734,22 +752,22 @@ function buildLand() {
   for (let z = 0; z < H; z++) {
     const iy = Math.min(GH - 2, (z / G) | 0), fz = z / G - iy;
     for (let x = 0; x < W; x++) {
-      const c = z * W + x, k = KIND[c]; if (k === 0) continue;
+      const c = z * W + x, k = KIND[c]; if (k === 0 && !outer[c]) continue;
       const ix = Math.min(GW - 2, (x / G) | 0), fx = x / G - ix, i = iy * GW + ix;
       const nz = ((SH[i] * (1 - fx) + SH[i + 1] * fx) * (1 - fz) + (SH[i + GW] * (1 - fx) + SH[i + GW + 1] * fx) * fz);
       for (let ch = 0; ch < 3; ch++) {
         let v = (COL[i * 3 + ch] * (1 - fx) + COL[(i + 1) * 3 + ch] * fx) * (1 - fz) + (COL[(i + GW) * 3 + ch] * (1 - fx) + COL[(i + GW + 1) * 3 + ch] * fx) * fz;
-        if (k === 3) v = C.salt[ch];
         BASE0[c * 3 + ch] = v * nz;
       }
     }
   }
   // su hücrelerine kıyı rengi ver (yumuşak kenarda siyah halka olmasın)
-  for (let c = 0; c < W * H; c++) if (KIND[c] === 0 || KIND[c] === 2) { BASE0[c * 3] = 214; BASE0[c * 3 + 1] = 204; BASE0[c * 3 + 2] = 160; }
+  for (let c = 0; c < W * H; c++) if ((KIND[c] === 0 && !outer[c]) || KIND[c] === 2) { BASE0[c * 3] = 214; BASE0[c * 3 + 1] = 204; BASE0[c * 3 + 2] = 160; }
   buildAlpha(); land.material.alphaMap = alphaTex; land.material.needsUpdate = true;
   buildWorldBack();
   restoreBase();
   updateTerrain(0, 0, GW - 1, GH - 1);
+  buildWaterMeshes();
   // Türkiye sınır çizgisi (arazinin üstünden)
   const pts = [];
   for (let i = 0; i < TR_OUTLINE.length; i++) {
@@ -763,22 +781,59 @@ function buildLand() {
   scene.add(borderLine);
 }
 let dL = null, NFADE = null;
+function buildWaterMeshes() {
+  const rn = seaNormal.clone(); rn.repeat.set(1, 1); rn.needsUpdate = true;
+  const rmat = seaMat({ color: '#3f9fd6', normalMap: rn, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -60 });
+  for (const [P_, wd] of RIVER_PATHS) {
+    const pos = [], uv = [], idx = []; let L = 0;
+    for (let i = 0; i < P_.length; i++) {
+      const a = P_[Math.max(0, i - 1)], b = P_[Math.min(P_.length - 1, i + 1)], tx = b[0] - a[0], tz = b[1] - a[1], tl = Math.hypot(tx, tz) || 1;
+      const nx = -tz / tl, nz = tx / tl, half = wd * .58, [x, z] = P_[i], y = Math.max(0, heightAt(x, z)) + .15;
+      if (i) L += Math.hypot(x - P_[i - 1][0], z - P_[i - 1][1]);
+      pos.push(x + nx * half, y, z + nz * half, x - nx * half, y, z - nz * half); uv.push(L / 6, 0, L / 6, 1);
+      if (i) { const k = i * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); }
+    }
+    const gR = new THREE.BufferGeometry(); gR.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gR.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    gR.setIndex(idx); gR.computeVertexNormals();
+    const mR = new THREE.Mesh(gR, rmat); mR.receiveShadow = true; scene.add(mR);
+  }
+  const shape = new THREE.Shape(pr(TUZ).map(([x, z]) => new THREE.Vector2(x, z)));
+  const gT = new THREE.ShapeGeometry(shape, 12).rotateX(Math.PI / 2).translate(0, .15, 0);
+  const mT = new THREE.Mesh(gT, new THREE.MeshLambertMaterial({ color: '#f1eee8', side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -60 })); mT.receiveShadow = true; scene.add(mT);
+}
 // Pürüzsüz kıyı: Türkiye kenar yumuşatmalı (anti-aliased) çizilir, komşular uzaklaştıkça solar
 const alphaCanvas = document.createElement('canvas'); alphaCanvas.width = W; alphaCanvas.height = H;
-const alphaTex = new THREE.CanvasTexture(alphaCanvas);
+const alphaTex = new THREE.CanvasTexture(alphaCanvas); alphaTex.anisotropy = 8;
+land.material.onBeforeCompile = sh => {   // SDF'den keskin ve pürüzsüz kenar
+  sh.fragmentShader = sh.fragmentShader.replace('#include <alphamap_fragment>', `#ifdef USE_ALPHAMAP
+    float sdv = texture2D( alphaMap, vAlphaMapUv ).g; float aw = max( fwidth( sdv ) * .7, 1e-4 );
+    diffuseColor.a *= smoothstep( .5 - aw, .5 + aw, sdv );
+  #endif`);
+};
 function buildAlpha() {
   const g = alphaCanvas.getContext('2d');
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
   const path = rings => { g.beginPath(); for (const r of rings) { r.forEach(([x, z], i) => i ? g.lineTo(x, z) : g.moveTo(x, z)); g.closePath(); } };
   g.fillStyle = '#fff'; path([TURKEY, ...TR_ISLANDS, MARMARA, MARMARA_ADA, ...LAKES].map(pr)); g.fill('evenodd');
-  g.globalCompositeOperation = 'destination-out'; g.lineCap = g.lineJoin = 'round';
-  for (const [P_, wd] of RIVER_PATHS) { g.lineWidth = wd; g.beginPath(); P_.forEach(([x, z], i) => i ? g.lineTo(x + .0, z) : g.moveTo(x, z)); g.stroke(); }
-  g.globalCompositeOperation = 'source-over';
-  const img = g.getImageData(0, 0, W, H), d = img.data;
-  for (let z = 0; z < 0; z++) { const iy = Math.min(GH - 1, Math.round(z / G));
-    for (let x = 0; x < W; x++) { const c = z * W + x; if (KIND[c] !== 2) continue;
-      const a = 255 * NFADE[iy * GW + Math.min(GW - 1, Math.round(x / G))], i = c * 4;
-      if (a > d[i]) d[i] = d[i + 1] = d[i + 2] = a; } }
+  // Kenar yumuşatmalı maskeden işaretli mesafe alanı (SDF): yakına inince de kıyı pürüzsüz eğri kalır
+  const img = g.getImageData(0, 0, W, H), d = img.data, N = W * H, m = new Float32Array(N), dist = new Float32Array(N).fill(1e9);
+  for (let c = 0; c < N; c++) m[c] = d[c * 4] / 255;
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) {
+    const c = z * W + x, v = m[c], ins = v >= .5;
+    let edge = v > .02 && v < .98;
+    if (!edge) edge = (x > 0 && (m[c - 1] >= .5) !== ins) || (x < W - 1 && (m[c + 1] >= .5) !== ins) || (z > 0 && (m[c - W] >= .5) !== ins) || (z < H - 1 && (m[c + W] >= .5) !== ins);
+    if (edge) dist[c] = Math.abs(v - .5);
+  }
+  for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { const c = z * W + x; let v = dist[c];
+    if (x > 0) v = Math.min(v, dist[c - 1] + 1);
+    if (z > 0) { v = Math.min(v, dist[c - W] + 1); if (x > 0) v = Math.min(v, dist[c - W - 1] + 1.414); if (x < W - 1) v = Math.min(v, dist[c - W + 1] + 1.414); }
+    dist[c] = v; }
+  for (let z = H - 1; z >= 0; z--) for (let x = W - 1; x >= 0; x--) { const c = z * W + x; let v = dist[c];
+    if (x < W - 1) v = Math.min(v, dist[c + 1] + 1);
+    if (z < H - 1) { v = Math.min(v, dist[c + W] + 1); if (x < W - 1) v = Math.min(v, dist[c + W + 1] + 1.414); if (x > 0) v = Math.min(v, dist[c + W - 1] + 1.414); }
+    dist[c] = v; }
+  for (let c = 0; c < N; c++) { const sd = (m[c] >= .5 ? 1 : -1) * dist[c], v = clamp(.5 + sd / 10, 0, 1) * 255, i = c * 4;
+    d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
   g.putImageData(img, 0, 0); alphaTex.needsUpdate = true;
 }
 function restoreBase() {
