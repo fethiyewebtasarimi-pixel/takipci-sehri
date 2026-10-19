@@ -99,7 +99,7 @@ function fractalOpen(pts, amp = .3, skip = () => false) {   // açık çizgi (k�
   for (let i = 1; i < pts.length; i++) { if (skip(pts[i - 1], pts[i])) { out.push(pts[i]); continue; } fractalSeg(pts[i - 1], pts[i], amp, 0, i + 500, out); }
   return out;
 }
-const boxEdge = (a, b) => a[0] === b[0] && (a[0] <= 17.5 || a[0] >= 54) || a[1] === b[1] && (a[1] <= 28.5 || a[1] >= 48);
+const boxEdge = (a, b) => a[0] === b[0] && (a[0] <= 17.5 || a[0] >= 54) || a[1] === b[1] && (a[1] <= 24 || a[1] >= 53);
 const BLACK_SEA = [...TR_COAST_N, ...fractalOpen([[41.65,41.9],[41.5,42.6],[40.0,43.4],[39.0,44.1],[38.0,44.5],[37.3,44.75],[36.6,45.2],[36.4,45.1],
   [35.3,44.9],[34.0,44.4],[33.4,44.6],[32.6,45.4],[33.6,45.9],[31.5,46.6],[30.7,46.5],[30.2,45.8],[29.7,45.2],[29.0,44.6],[28.6,44.0],[28.0,43.4],[27.9,42.9],[27.45,42.5],[27.75,42.3]])];
 const MED_SEA = [[26.04,40.73], ...TURKEY.slice(iHatay).reverse(), ...fractalOpen([[35.9,35.4],[35.8,34.6],[35.6,34.1],[35.1,33.1],[34.9,32.4],[34.5,31.5],
@@ -108,9 +108,10 @@ const MED_SEA = [[26.04,40.73], ...TURKEY.slice(iHatay).reverse(), ...fractalOpe
   [22.9,40.6],[23.6,40.3],[24.4,40.9],[25.5,40.9]], .3, boxEdge)];
 const AZOV = fractal([[35.5,45.4],[36.6,45.4],[38.2,46.9],[39.3,47.2],[37.5,47.1],[35.0,46.3],[34.8,45.8]], .3);
 const CASPIAN = fractal([[47.5,45.6],[47.6,43.9],[48.6,41.9],[49.5,40.6],[49.0,39.4],[48.9,38.4],[49.5,37.5],[50.4,37.1],[51.5,36.8],[54,36.9],[54,48],[49.5,46.8]], .3, i => i < 9 || i === 11);
-const PERSIAN = fractal([[47.9,29.9],[48.6,30.1],[49.6,30.0],[50.4,29.3],[50.4,28.5],[47.9,28.5]], .3, i => i < 3);
+const PERSIAN = fractal([[47.9,29.9],[48.6,30.1],[49.6,30.0],[50.4,29.3],[51.4,27.9],[52.6,27.3],[54,26.6],[54,24],[51.6,24],[51.0,24.6],[50.8,25.6],[50.0,26.6],[49.4,27.2],[48.5,28.0],[48.3,28.8]], .3, i => i !== 6 && i !== 7);
+const RED_SEA = fractal([[32.55,29.95],[33.6,27.8],[34.5,26.0],[35.4,24],[37.5,24],[37.2,24.6],[36.3,26.1],[35.2,28.0],[34.95,29.5],[34.45,28.3],[34.25,27.75],[33.6,28.4]], .3, i => i !== 3 && i !== 4);
 const WORLD_LAKES = [[[45.1,38.2],[45.6,37.9],[45.9,37.3],[45.5,37.2],[45.2,37.6]], [[45.0,40.6],[45.4,40.5],[45.3,40.2],[44.9,40.3]]].map(r => fractal(r, .3));
-const SEAS = () => [BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, ...WORLD_LAKES, ...FOREIGN_ISLANDS];
+const SEAS = () => [BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, RED_SEA, ...WORLD_LAKES, ...FOREIGN_ISLANDS];
 const FOREIGN_ISLANDS = [
   [[25.85,39.25],[26.2,39.38],[26.6,39.28],[26.4,39.0],[25.9,39.1]], [[25.85,38.55],[26.15,38.58],[26.15,38.25],[25.9,38.3]],
   [[26.55,37.8],[27.05,37.75],[26.95,37.65],[26.6,37.68]], [[26.95,36.85],[27.35,36.9],[27.15,36.75]],
@@ -123,7 +124,7 @@ const FOREIGN_ISLANDS = [
 const RIDGES_WORLD = [   // çevre ülkelerin dağları (sadece arka plan gölgesi için)
   [[[20.5,40.5],[21.5,39.0],[22.0,37.5]], 8, 25], [[[22.5,47.8],[24.5,47.5],[26.0,46.0],[25.0,45.4],[23.0,45.3]], 8, 25],
   [[[49.0,36.8],[51.5,36.0],[54.0,36.5]], 12, 25], [[[35.8,33.3],[36.3,34.5]], 6, 12], [[[44.5,37.5],[46.5,35.5],[48.5,33.5],[50.5,31.5],[52.5,30.0]], 9, 40],
-  [[[33.8,44.6],[34.8,44.8]], 4, 8], [[[47.0,40.5],[49.0,40.0]], 5, 20],
+  [[[33.8,44.6],[34.8,44.8]], 4, 8], [[[47.0,40.5],[49.0,40.0]], 5, 20], [[[35.6,28.2],[37.2,25.0]], 7, 25], [[[33.6,28.9],[34.2,28.3]], 6, 10],
 ];
 const RIDGES = [
   [[[30.4,40.85],[31.8,41.2],[33.5,41.45],[35.0,41.35],[36.5,40.85],[38.5,40.55],[40.0,40.65],[41.2,40.9],[42.2,41.2]], 7, 36],  // Kuzey Anadolu Dağları
@@ -447,7 +448,7 @@ for (let i = 0; i < 0; i++) {
 }
 let borderLine = null;
 // ÇEVRE KITALAR: Türkiye'nin altında, geniş bir alanı kaplayan dokulu düzlem (Balkanlar, Kafkasya, Orta Doğu, Kuzey Afrika)
-const WB = { lon0: 17.5, lon1: 54, lat0: 28.5, lat1: 48 };
+const WB = { lon0: 17.5, lon1: 54, lat0: 24, lat1: 53 };
 const wbX0 = proj(WB.lon0, WB.lat1)[0], wbZ0 = proj(WB.lon0, WB.lat1)[1], wbX1 = proj(WB.lon1, WB.lat0)[0], wbZ1 = proj(WB.lon1, WB.lat0)[1];
 const wbCanvas = document.createElement('canvas'); wbCanvas.width = 2048; wbCanvas.height = Math.round(2048 * (wbZ1 - wbZ0) / (wbX1 - wbX0));
 const wbTex = new THREE.CanvasTexture(wbCanvas); wbTex.colorSpace = THREE.SRGBColorSpace; wbTex.anisotropy = 8;
@@ -461,7 +462,7 @@ function buildWorldBack() {
   const tr = ([lo, la]) => { const [x, z] = proj(lo, la); return [(x - wbX0) / sx, (z - wbZ0) / sz]; };
   const fillPolys = (polys, color, rule) => { g.fillStyle = color; g.beginPath();
     for (const r of polys) { r.forEach((p, i) => { const [x, z] = tr(p); i ? g.lineTo(x, z) : g.moveTo(x, z); }); g.closePath(); } g.fill(rule); };
-  fillPolys([BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, ...WORLD_LAKES, MARMARA, ...LAKES], '#000', 'nonzero');
+  fillPolys([BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, RED_SEA, ...WORLD_LAKES, MARMARA, ...LAKES], '#000', 'nonzero');
   fillPolys([...FOREIGN_ISLANDS, MARMARA_ADA, ...TR_ISLANDS], '#fff', 'nonzero');
   g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
   const mask = g.getImageData(0, 0, cw, ch).data;
@@ -483,6 +484,7 @@ function buildWorldBack() {
     const shade = clamp(1 + ((hq(fi - .5, fj) - hq(fi + .5, fj)) * .55 + (hq(fi, fj - .5) - hq(fi, fj + .5)) * .42) * 1.1, .62, 1.3);
     let col = [104, 152, 72];                                                                 // Balkanlar / Avrupa ormanı
     col = mixc(col, [156, 176, 96], sm(44.5, 46, lat));                                        // Ukrayna-Rusya bozkırı
+    col = mixc(col, [98, 142, 70], sm(49, 51.5, lat));                                          // Rusya-Belarus ormanları
     col = mixc(col, [96, 146, 70], sm(38.8, 40.5, lon) * sm(40.5, 41.6, lat) * sm(44.5, 43.5, lat)); // Kafkasya
     col = mixc(col, [176, 182, 112], sm(33.5, 35.5, lon) * sm(37, 35, lat));                   // Levant kıyısı
     col = mixc(col, [206, 186, 136], sm(45, 47, lon) * sm(39.5, 38, lat));                     // İran yaylası
@@ -1549,11 +1551,26 @@ const rig = { tx: W / 2, tz: H / 2, dist: 2000, pitch: 1.55, yaw: 0, orbit: 0 };
 const FOV = 45, TOP = 89.4 * Math.PI / 180;
 const pitchFor = d => (38 + clamp((Math.log(d) - Math.log(10)) / (Math.log(600) - Math.log(10)), 0, 1) * 51.5) * Math.PI / 180;
 const TRB = (() => { const xs = TR_OUTLINE.map(p => p[0]), zs = TR_OUTLINE.map(p => p[1]); return { x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs) }; })();
-const fitTurkeyDist = () => Math.max((TRB.z1 - TRB.z0) / 2, (TRB.x1 - TRB.x0) / 2 / (vw / vh)) * 1.06 / Math.tan(FOV / 2 * Math.PI / 180);
+const TANF = () => Math.tan(FOV / 2 * Math.PI / 180);
+// Haritanın dışı hiç görünmesin: görüş alanı çevre harita sınırlarına sığmalı
+const maxViewDist = () => Math.min((wbZ1 - wbZ0) / 2 * .9, (wbX1 - wbX0) / 2 / (vw / vh) * .96) / TANF();
+const fitTurkeyDist = () => Math.min(maxViewDist(), Math.max((TRB.z1 - TRB.z0) / 2, (TRB.x1 - TRB.x0) / 2 / (vw / vh)) * 1.06 / TANF());
+const MIN_DIST = 6;   // en yakın: birkaç ev rahat görünür
+function keepInside() {
+  rig.dist = Math.min(rig.dist, maxViewDist());
+  const hh = rig.dist * TANF() * (rig.pitch < 1.4 ? 1.25 : 1.03), hw = rig.dist * TANF() * (vw / vh) * 1.03;
+  rig.tx = clamp(rig.tx, Math.min(wbX0 + hw, (wbX0 + wbX1) / 2), Math.max(wbX1 - hw, (wbX0 + wbX1) / 2));
+  rig.tz = clamp(rig.tz, Math.min(wbZ0 + hh, (wbZ0 + wbZ1) / 2), Math.max(wbZ1 - hh, (wbZ0 + wbZ1) / 2));
+}
+let camTy = 0;
 function applyCam() {
   const hd = rig.dist * Math.cos(rig.pitch), y = rig.dist * Math.sin(rig.pitch);
-  camera.position.set(rig.tx + Math.sin(rig.yaw) * hd, y, rig.tz + Math.cos(rig.yaw) * hd);
-  camera.lookAt(rig.tx, 0, rig.tz);
+  keepInside();
+  // dağlık yerde hedef arazinin üstünde olsun; kamera araziye girmesin
+  const ty = Math.max(0, heightAt(rig.tx, rig.tz)); camTy += (ty - camTy) * .2;
+  const cx = rig.tx + Math.sin(rig.yaw) * hd, cz = rig.tz + Math.cos(rig.yaw) * hd;
+  camera.position.set(cx, Math.max(camTy + y, heightAt(cx, cz) + 1.5), cz);
+  camera.lookAt(rig.tx, camTy, rig.tz);
   camera.near = Math.max(.05, rig.dist * .01); camera.far = rig.dist * 14 + 800;
   camera.updateProjectionMatrix();
   scene.fog.near = rig.dist * 1.3; scene.fog.far = rig.dist * 3.6 + 45;
@@ -1563,7 +1580,7 @@ function applyCam() {
   const sc = sun.shadow.camera; sc.left = sc.bottom = -s; sc.right = sc.top = s; sc.near = .5; sc.far = s * 5; sc.updateProjectionMatrix();
 }
 function clampRig() {
-  rig.dist = clamp(rig.dist, 2.5, fitTurkeyDist() * 1.12);
+  rig.dist = clamp(rig.dist, MIN_DIST, maxViewDist());
   rig.tx = clamp(rig.tx, TRB.x0 - 150, TRB.x1 + 150); rig.tz = clamp(rig.tz, TRB.z0 - 150, TRB.z1 + 150);
 }
 let flyTok = 0;
@@ -1976,7 +1993,7 @@ const pointers = new Map(); let down = null, pinch = null, grab = null;
 const cv = renderer.domElement;
 function zoomAt(px, py, f) {
   const g = groundAt(px, py), d0 = rig.dist;
-  rig.dist = clamp(rig.dist * f, 2.5, fitTurkeyDist() * 1.5); rig.pitch = pitchFor(rig.dist);
+  rig.dist = clamp(rig.dist * f, MIN_DIST, maxViewDist()); rig.pitch = pitchFor(rig.dist);
   if (g) { const k = rig.dist / d0; rig.tx = g.x + (rig.tx - g.x) * k; rig.tz = g.z + (rig.tz - g.z) * k; }
   clampRig();
 }
