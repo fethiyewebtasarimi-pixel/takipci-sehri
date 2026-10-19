@@ -22,7 +22,7 @@ const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
 const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
 const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
 const GW = W / G + 1, GH = H / G + 1;
-const WORLD_VERSION = 6;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const WORLD_VERSION = 7;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
 const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
@@ -94,16 +94,37 @@ const RIVERS = [
 // denizler (komşu kıyıları kabaca) ve yabancı adalar
 const TR_COAST_N = TURKEY.slice(TURKEY.idx[6], TURKEY.idx[31] + 1);
 const iHatay = TURKEY.idx[iHatayRaw];
-const BLACK_SEA = [...TR_COAST_N, [41.65,41.9],[41.6,42.5],[41.4,43.6],[27.95,43.6],[27.9,42.9],[27.45,42.5],[27.75,42.3]];
-const MED_SEA = [[26.04,40.73], ...TURKEY.slice(iHatay).reverse(), [35.9,35.4],[35.85,34.6],[24.4,34.6],[24.4,40.85],[24.9,40.9],[25.5,40.92]];
+function fractalOpen(pts, amp = .3, skip = () => false) {   // açık çizgi (kıyı parçası) için fraktal
+  const out = [pts[0]];
+  for (let i = 1; i < pts.length; i++) { if (skip(pts[i - 1], pts[i])) { out.push(pts[i]); continue; } fractalSeg(pts[i - 1], pts[i], amp, 0, i + 500, out); }
+  return out;
+}
+const boxEdge = (a, b) => a[0] === b[0] && (a[0] <= 17.5 || a[0] >= 54) || a[1] === b[1] && (a[1] <= 28.5 || a[1] >= 48);
+const BLACK_SEA = [...TR_COAST_N, ...fractalOpen([[41.65,41.9],[41.5,42.6],[40.0,43.4],[39.0,44.1],[38.0,44.5],[37.3,44.75],[36.6,45.2],[36.4,45.1],
+  [35.3,44.9],[34.0,44.4],[33.4,44.6],[32.6,45.4],[33.6,45.9],[31.5,46.6],[30.7,46.5],[30.2,45.8],[29.7,45.2],[29.0,44.6],[28.6,44.0],[28.0,43.4],[27.9,42.9],[27.45,42.5],[27.75,42.3]])];
+const MED_SEA = [[26.04,40.73], ...TURKEY.slice(iHatay).reverse(), ...fractalOpen([[35.9,35.4],[35.8,34.6],[35.6,34.1],[35.1,33.1],[34.9,32.4],[34.5,31.5],
+  [32.3,31.2],[31.0,31.6],[29.9,31.2],[28.0,30.9],[25.2,31.6],[23.0,32.2],[21.0,32.9],[20.0,32.0],[19.6,30.6],[17.5,30.6],[17.5,42.7],[18.5,42.4],
+  [19.4,41.8],[19.4,40.4],[20.0,39.6],[21.1,38.3],[21.6,37.0],[22.4,36.4],[23.1,36.45],[23.2,37.4],[24.0,37.7],[23.6,38.3],[22.9,39.3],[22.6,40.1],
+  [22.9,40.6],[23.6,40.3],[24.4,40.9],[25.5,40.9]], .3, boxEdge)];
+const AZOV = fractal([[35.5,45.4],[36.6,45.4],[38.2,46.9],[39.3,47.2],[37.5,47.1],[35.0,46.3],[34.8,45.8]], .3);
+const CASPIAN = fractal([[47.5,45.6],[47.6,43.9],[48.6,41.9],[49.5,40.6],[49.0,39.4],[48.9,38.4],[49.5,37.5],[50.4,37.1],[51.5,36.8],[54,36.9],[54,48],[49.5,46.8]], .3, i => i < 9 || i === 11);
+const PERSIAN = fractal([[47.9,29.9],[48.6,30.1],[49.6,30.0],[50.4,29.3],[50.4,28.5],[47.9,28.5]], .3, i => i < 3);
+const WORLD_LAKES = [[[45.1,38.2],[45.6,37.9],[45.9,37.3],[45.5,37.2],[45.2,37.6]], [[45.0,40.6],[45.4,40.5],[45.3,40.2],[44.9,40.3]]].map(r => fractal(r, .3));
+const SEAS = () => [BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, ...WORLD_LAKES, ...FOREIGN_ISLANDS];
 const FOREIGN_ISLANDS = [
   [[25.85,39.25],[26.2,39.38],[26.6,39.28],[26.4,39.0],[25.9,39.1]], [[25.85,38.55],[26.15,38.58],[26.15,38.25],[25.9,38.3]],
   [[26.55,37.8],[27.05,37.75],[26.95,37.65],[26.6,37.68]], [[26.95,36.85],[27.35,36.9],[27.15,36.75]],
   [[27.7,36.3],[28.25,36.45],[28.15,36.1],[27.75,35.9]], [[25.0,39.95],[25.4,40.0],[25.35,39.8],[25.1,39.8]],
-  [[24.6,40.8],[24.8,40.75],[24.75,40.6]], [[24.5,35.4],[25.5,35.35],[26.3,35.3],[26.2,35.0],[25.0,35.0],[24.5,35.15]],
+  [[24.6,40.8],[24.8,40.75],[24.75,40.6]], [[23.5,35.5],[24.3,35.55],[25.5,35.35],[26.3,35.25],[26.1,35.0],[24.7,34.95],[23.6,35.2]],
+  [[23.6,38.9],[24.1,38.6],[24.6,38.05],[24.1,38.3],[23.3,38.8]],
   [[32.27,35.1],[32.9,35.4],[33.6,35.36],[34.6,35.69],[34.0,35.1],[33.9,34.97],[33.0,34.56],[32.4,34.75]],
 ].map(r => fractal(r, .32));
 // dağ sıraları: [noktalar, yükseklik, genişlik (hücre)]
+const RIDGES_WORLD = [   // çevre ülkelerin dağları (sadece arka plan gölgesi için)
+  [[[20.5,40.5],[21.5,39.0],[22.0,37.5]], 8, 25], [[[22.5,47.8],[24.5,47.5],[26.0,46.0],[25.0,45.4],[23.0,45.3]], 8, 25],
+  [[[49.0,36.8],[51.5,36.0],[54.0,36.5]], 12, 25], [[[35.8,33.3],[36.3,34.5]], 6, 12], [[[44.5,37.5],[46.5,35.5],[48.5,33.5],[50.5,31.5],[52.5,30.0]], 9, 40],
+  [[[33.8,44.6],[34.8,44.8]], 4, 8], [[[47.0,40.5],[49.0,40.0]], 5, 20],
+];
 const RIDGES = [
   [[[30.4,40.85],[31.8,41.2],[33.5,41.45],[35.0,41.35],[36.5,40.85],[38.5,40.55],[40.0,40.65],[41.2,40.9],[42.2,41.2]], 7, 36],  // Kuzey Anadolu Dağları
   [[[40.6,40.75],[41.3,40.9],[41.8,41.1]], 8, 18],                                                                                  // Kaçkarlar
@@ -397,9 +418,9 @@ const seaNormalFar = seaNormal.clone(); seaNormalFar.repeat.set(1140, 1140); sea
 const seaCanvas = document.createElement('canvas'); seaCanvas.width = GW; seaCanvas.height = GH;
 const seaColTex = new THREE.CanvasTexture(seaCanvas); seaColTex.colorSpace = THREE.SRGBColorSpace;
 const seaMats = [];
-const seaMat = o => { const m = new THREE.MeshPhongMaterial({ shininess: 40, specular: '#6f8fa3', normalScale: new THREE.Vector2(.5, .5), ...o }); seaMats.push(m); return m; };
+const seaMat = o => { const m = new THREE.MeshPhongMaterial({ shininess: 60, specular: '#8fb6cf', normalScale: new THREE.Vector2(.5, .5), ...o }); seaMats.push(m); return m; };
 scene.add(new THREE.Mesh(new THREE.PlaneGeometry(W, H).rotateX(-Math.PI / 2).translate(W / 2, -.12, H / 2), seaMat({ map: seaColTex, normalMap: seaNormal })));
-scene.add(new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2).translate(W / 2, -.2, H / 2), seaMat({ color: '#5c9ccc', normalMap: seaNormalFar })));
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2).translate(W / 2, -.2, H / 2), seaMat({ color: '#22609b', normalMap: seaNormalFar })));
 // bulutlar (uzaktan bakınca)
 const cloudTex = canvasTexEarly(128, 128, g => {
   for (let i = 0; i < 9; i++) { const x = 30 + Math.random() * 68, y = 40 + Math.random() * 48, r = 18 + Math.random() * 22;
@@ -413,6 +434,56 @@ for (let i = 0; i < 0; i++) {
   sp.position.set(hash2(i, 1) * W, 120 + hash2(i, 2) * 80, hash2(i, 3) * H); scene.add(sp); clouds.push(sp);
 }
 let borderLine = null;
+// ÇEVRE KITALAR: Türkiye'nin altında, geniş bir alanı kaplayan dokulu düzlem (Balkanlar, Kafkasya, Orta Doğu, Kuzey Afrika)
+const WB = { lon0: 17.5, lon1: 54, lat0: 28.5, lat1: 48 };
+const wbX0 = proj(WB.lon0, WB.lat1)[0], wbZ0 = proj(WB.lon0, WB.lat1)[1], wbX1 = proj(WB.lon1, WB.lat0)[0], wbZ1 = proj(WB.lon1, WB.lat0)[1];
+const wbCanvas = document.createElement('canvas'); wbCanvas.width = 2048; wbCanvas.height = Math.round(2048 * (wbZ1 - wbZ0) / (wbX1 - wbX0));
+const wbTex = new THREE.CanvasTexture(wbCanvas); wbTex.colorSpace = THREE.SRGBColorSpace; wbTex.anisotropy = 8;
+const worldBack = new THREE.Mesh(new THREE.PlaneGeometry(wbX1 - wbX0, wbZ1 - wbZ0).rotateX(-Math.PI / 2).translate((wbX0 + wbX1) / 2, -.05, (wbZ0 + wbZ1) / 2),
+  new THREE.MeshLambertMaterial({ map: wbTex, transparent: true, alphaTest: .02 }));
+scene.add(worldBack);
+function buildWorldBack() {
+  const cw = wbCanvas.width, ch = wbCanvas.height, sx = (wbX1 - wbX0) / cw, sz = (wbZ1 - wbZ0) / ch, g = wbCanvas.getContext('2d');
+  // kara maskesi (kenar yumuşatmalı)
+  g.fillStyle = '#fff'; g.fillRect(0, 0, cw, ch);
+  const tr = ([lo, la]) => { const [x, z] = proj(lo, la); return [(x - wbX0) / sx, (z - wbZ0) / sz]; };
+  const fillPolys = (polys, color, rule) => { g.fillStyle = color; g.beginPath();
+    for (const r of polys) { r.forEach((p, i) => { const [x, z] = tr(p); i ? g.lineTo(x, z) : g.moveTo(x, z); }); g.closePath(); } g.fill(rule); };
+  fillPolys([BLACK_SEA, MED_SEA, AZOV, CASPIAN, PERSIAN, ...WORLD_LAKES, MARMARA, ...LAKES], '#000', 'nonzero');
+  fillPolys([...FOREIGN_ISLANDS, MARMARA_ADA, ...TR_ISLANDS], '#fff', 'nonzero');
+  g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
+  for (const [P_, wd] of RIVER_PATHS) { g.lineWidth = wd / sx; g.beginPath(); P_.forEach(([x, z], i) => { const X = (x - wbX0) / sx, Z = (z - wbZ0) / sz; i ? g.lineTo(X, Z) : g.moveTo(X, Z); }); g.stroke(); }
+  const mask = g.getImageData(0, 0, cw, ch).data;
+  // kabaca yükseklik (gölge için) — çeyrek çözünürlük
+  const qw = cw >> 2, qh = ch >> 2, HQ = new Float32Array(qw * qh);
+  const RW = [...RIDGES, ...RIDGES_WORLD].map(([pts, h, w]) => ({ q: pr(pts), h, w }));
+  for (let j = 0; j < qh; j++) for (let i = 0; i < qw; i++) {
+    const x = wbX0 + (i * 4 + 2) * sx, z = wbZ0 + (j * 4 + 2) * sz; let h = 0;
+    for (const r of RW) { const d = distToPoly(r.q, x, z); if (d < r.w * 3) h += r.h * Math.exp(-((d / r.w) ** 2)); }
+    HQ[j * qw + i] = h * (.55 + .7 * fbm(x * .02, z * .02)) + 1.2 * fbm(x * .012, z * .012);
+  }
+  const img = g.createImageData(cw, ch), d = img.data;
+  for (let j = 0; j < ch; j++) for (let i = 0; i < cw; i++) {
+    const o = (j * cw + i) * 4, a = mask[o]; if (a < 4) { d[o + 3] = 0; continue; }
+    const x = wbX0 + i * sx, z = wbZ0 + j * sz, [lon, lat] = unproj(x, z);
+    const hq = (fi, fj) => { fi = clamp(fi, 0, qw - 1.001); fj = clamp(fj, 0, qh - 1.001); const a0 = fi | 0, b0 = fj | 0, tx = fi - a0, ty = fj - b0, k0 = b0 * qw + a0;
+      return (HQ[k0] * (1 - tx) + HQ[k0 + 1] * tx) * (1 - ty) + (HQ[k0 + qw] * (1 - tx) + HQ[k0 + qw + 1] * tx) * ty; };
+    const fi = i / 4 - .5, fj = j / 4 - .5, hh = hq(fi, fj);
+    const shade = clamp(1 + ((hq(fi - .5, fj) - hq(fi + .5, fj)) * .55 + (hq(fi, fj - .5) - hq(fi, fj + .5)) * .42) * 1.1, .62, 1.3);
+    let col = [104, 152, 72];                                                                 // Balkanlar / Avrupa ormanı
+    col = mixc(col, [156, 176, 96], sm(44.5, 46, lat));                                        // Ukrayna-Rusya bozkırı
+    col = mixc(col, [96, 146, 70], sm(38.8, 40.5, lon) * sm(40.5, 41.6, lat) * sm(44.5, 43.5, lat)); // Kafkasya
+    col = mixc(col, [176, 182, 112], sm(33.5, 35.5, lon) * sm(37, 35, lat));                   // Levant kıyısı
+    col = mixc(col, [206, 186, 136], sm(45, 47, lon) * sm(39.5, 38, lat));                     // İran yaylası
+    col = mixc(col, [222, 200, 150], sm(36.6, 34.6, lat) * sm(36.5, 38.5, lon));               // Suriye-Irak çölü
+    col = mixc(col, [234, 214, 164], sm(32.2, 31.2, lat));                                     // Mısır-Libya çölü
+    col = mixc(col, [118, 160, 80], Math.exp(-(((lon - 31.0) / .9) ** 2) - (((lat - 30.9) / .45) ** 2)) * .9); // Nil deltası
+    col = mixc(col, [140, 128, 110], sm(9, 14, hh) * .8); col = mixc(col, [245, 247, 250], sm(15, 19, hh));
+    const v = .94 + vnoise(x * .01, z * .01) * .12;
+    d[o] = col[0] * shade * v; d[o + 1] = col[1] * shade * v; d[o + 2] = col[2] * shade * v; d[o + 3] = a;
+  }
+  g.putImageData(img, 0, 0); wbTex.needsUpdate = true;
+}
 
 function canvasTex(w, h, draw, repeat) {
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -564,8 +635,8 @@ function chamfer(src) {
     d[i] = v; }
   return d;
 }
-const C = { steppe: [226,214,158], east: [184,206,146], se: [232,210,168], med: [176,208,136], black: [138,188,118],
-  rock: [204,194,180], snow: [252,252,252], sand: [242,232,200], salt: [246,244,240] };
+const C = { steppe: [196,186,104], east: [136,160,76], se: [204,176,114], med: [124,168,62], black: [70,140,52],
+  rock: [140,128,110], snow: [245,247,250], sand: [226,210,165], salt: [238,234,228] };
 const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 function buildLand() {
   RIVER_PATHS = RIVERS.map(([pts, wd], i) => [meander(pts, i * 7.3 + 1), wd]);
@@ -573,7 +644,7 @@ function buildLand() {
   const outer = new Uint8Array(W * H), sea = new Uint8Array(W * H), salt = new Uint8Array(W * H);
   fillRings([TURKEY, ...TR_ISLANDS].map(pr), outer);
   fillRings([TURKEY, ...TR_ISLANDS, MARMARA, MARMARA_ADA, ...LAKES].map(pr), LAND);
-  fillRings([BLACK_SEA, MED_SEA, ...FOREIGN_ISLANDS].map(pr), sea);
+  fillRings(SEAS().map(pr), sea);
   fillRings([pr(TUZ)], salt);
   KIND = new Uint8Array(W * H);
   for (let c = 0; c < W * H; c++) {
@@ -600,6 +671,8 @@ function buildLand() {
     if (k === 0 && !inner) { if (lat > 41.05 && lon > 27.9 && lon < 41.8) black[i] = 1; else med[i] = 1; }
   }
   const dW = chamfer(water), dB = chamfer(black), dM = chamfer(med);
+  const edgeSrc = new Uint8Array(GW * GH); for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) edgeSrc[iy * GW + ix] = water[iy * GW + ix] || kAt(ix, iy) === 2;
+  const dE = chamfer(edgeSrc);   // kıyı veya kara sınırı: Türkiye'nin kenarında arazi yumuşakça alçalır
   const trC = new Uint8Array(GW * GH); for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) trC[iy * GW + ix] = kAt(ix, iy) === 1 || kAt(ix, iy) === 3;
   const dT = chamfer(trC); NFADE = new Float32Array(GW * GH);
   for (let i = 0; i < GW * GH; i++) NFADE[i] = sm(46, 12, dT[i]);
@@ -613,19 +686,19 @@ function buildLand() {
     let h = 0;
     for (const r of RP) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) { const d = distToPoly(r.q, x, z); h += r.h * Math.exp(-((d / r.w) ** 2)); }
     let pk = 0; for (const p of PK) pk = Math.max(pk, p.h * Math.exp(-((Math.hypot(x - p.x, z - p.z) / p.w) ** 2)));
-    const rug = fbm(x * .022, z * .022), det = fbm(x * .012, z * .012);
+    const rug = 1 - Math.abs(2 * vnoise(x * .035, z * .035) - 1), det = fbm(x * .015, z * .015);
     const plateau = 1.4 * sm(36.7, 37.6, lat) * sm(41.6, 40.6, lat) * sm(29.5, 31, lon) + 2.8 * sm(38, 41, lon) * sm(42.6, 41.4, lat);
-    h = h * (.55 + .7 * rug) + pk + plateau * (.85 + .3 * det) + .5 * det;
+    h = h * (.45 + .9 * rug) + pk + plateau * (.8 + .4 * det) + .8 * det;
     const edge = Math.min(x, W - x, z, H - z);
-    h *= sm(0, 5, dW[i]) * (k === 2 ? NFADE[i] : 1);
+    h *= sm(0, 5, dE[i]) * (k === 2 ? 0 : 1);
     const hRaw = water[i] ? 0 : Math.max(0, h); H0[i] = hRaw * 2.1;
     // bölge rengi
     const db = dB[i] * G, dm = dM[i] * G;
     const wB = sm(110, 25, db), wM = sm(90, 15, dm), wE = sm(37.8, 39.8, lon), wS = sm(38.3, 37.3, lat) * sm(36.3, 37.6, lon);
     let col = C.steppe; col = mixc(col, C.east, wE); col = mixc(col, C.se, wS); col = mixc(col, C.med, wM); col = mixc(col, C.black, wB);
     const pv = vnoise(x * .006 + 3, z * .006 + 7), pv2 = vnoise(x * .02 + 11, z * .02 + 5);
-    col = mixc(col, pv < .5 ? [200, 214, 152] : [232, 212, 164], Math.min(1, Math.abs(pv - .5) * 1.4) * (1 - wB) * (1 - wM * .5));
-    col = mixc(col, [190, 212, 150], sm(.62, .8, pv2) * .3 * (1 - wB));
+    col = mixc(col, pv < .5 ? [160, 176, 86] : [204, 176, 106], Math.min(1, Math.abs(pv - .5) * 1.6) * (1 - wB) * (1 - wM * .5));
+    col = mixc(col, [150, 170, 80], sm(.62, .8, pv2) * .35 * (1 - wB));
     const rock = sm(9, 13.5, hRaw), snow = sm(16.5, 20, hRaw + (vnoise(x * .05, z * .05) - .5) * 3);
     col = mixc(col, C.rock, rock * .85); col = mixc(col, C.snow, snow);
     col = mixc(col, C.sand, sm(3.2, .9, dW[i] * G) * Math.max(wM, wB * .6) * (1 - rock));
@@ -637,7 +710,7 @@ function buildLand() {
   // tepeden ışık gelen haritalardaki gibi dağ gölgesi (kabartma)
   const SH = new Float32Array(GW * GH), Lx = -.55, Ly = .72, Lz = -.42, Ll = Math.hypot(Lx, Ly, Lz);
   let HB = H0.slice();
-  for (let pass = 0; pass < 2; pass++) { const o = new Float32Array(HB.length);
+  for (let pass = 0; pass < 1; pass++) { const o = new Float32Array(HB.length);
     for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) { let a = 0, n = 0;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = ix + dx, Y = iy + dy; if (X < 0 || Y < 0 || X >= GW || Y >= GH) continue; a += HB[Y * GW + X]; n++; }
       o[iy * GW + ix] = a / n; }
@@ -647,13 +720,13 @@ function buildLand() {
     const hu = HB[Math.max(0, iy - 1) * GW + ix], hd = HB[Math.min(GH - 1, iy + 1) * GW + ix];
     const nx = hl - hr, ny = 2 * G, nz = hu - hd, nl = Math.hypot(nx, ny, nz);
     const dot = (nx * Lx + ny * Ly + nz * Lz) / nl / Ll;
-    SH[i] = clamp(1 + (dot - Ly / Ll) * 1.25, .8, 1.12);
+    SH[i] = clamp(1 + (dot - Ly / Ll) * 1.9, .62, 1.3);
   }
   // deniz rengi
   const sctx = seaCanvas.getContext('2d'), simg = sctx.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) { const t = dL[i], ex = (i % GW) * G, ez = ((i / GW) | 0) * G, edge = Math.min(ex, W - ex, ez, H - ez);
-    let c = mixc([168, 230, 228], mixc([122, 196, 222], [92, 156, 204], sm(1.5, 14, t)), sm(.15, 1.2, t));
-    c = mixc([92, 156, 204], c, Math.min(sm(30, 160, edge), sm(58, 22, dT[i])));
+    let c = mixc([110, 214, 220], mixc([52, 150, 200], [34, 96, 156], sm(1.2, 12, t)), sm(.15, 1.1, t));
+    c = mixc([34, 96, 156], c, sm(30, 160, edge));
     simg.data[i * 4] = c[0]; simg.data[i * 4 + 1] = c[1]; simg.data[i * 4 + 2] = c[2]; simg.data[i * 4 + 3] = 255; }
   sctx.putImageData(simg, 0, 0); seaColTex.needsUpdate = true;
   // hücre renkleri
@@ -672,8 +745,9 @@ function buildLand() {
     }
   }
   // su hücrelerine kıyı rengi ver (yumuşak kenarda siyah halka olmasın)
-  for (let c = 0; c < W * H; c++) if (KIND[c] === 0) { BASE0[c * 3] = 238; BASE0[c * 3 + 1] = 228; BASE0[c * 3 + 2] = 196; }
+  for (let c = 0; c < W * H; c++) if (KIND[c] === 0 || KIND[c] === 2) { BASE0[c * 3] = 214; BASE0[c * 3 + 1] = 204; BASE0[c * 3 + 2] = 160; }
   buildAlpha(); land.material.alphaMap = alphaTex; land.material.needsUpdate = true;
+  buildWorldBack();
   restoreBase();
   updateTerrain(0, 0, GW - 1, GH - 1);
   // Türkiye sınır çizgisi (arazinin üstünden)
@@ -701,7 +775,7 @@ function buildAlpha() {
   for (const [P_, wd] of RIVER_PATHS) { g.lineWidth = wd; g.beginPath(); P_.forEach(([x, z], i) => i ? g.lineTo(x + .0, z) : g.moveTo(x, z)); g.stroke(); }
   g.globalCompositeOperation = 'source-over';
   const img = g.getImageData(0, 0, W, H), d = img.data;
-  for (let z = 0; z < H; z++) { const iy = Math.min(GH - 1, Math.round(z / G));
+  for (let z = 0; z < 0; z++) { const iy = Math.min(GH - 1, Math.round(z / G));
     for (let x = 0; x < W; x++) { const c = z * W + x; if (KIND[c] !== 2) continue;
       const a = 255 * NFADE[iy * GW + Math.min(GW - 1, Math.round(x / G))], i = c * 4;
       if (a > d[i]) d[i] = d[i + 1] = d[i + 2] = a; } }
@@ -731,7 +805,7 @@ function heightAt(x, z) {
 const flatAt = (x, z) => { const ix = clamp(Math.round(x / G), 0, GW - 1), iy = clamp(Math.round(z / G), 0, GH - 1); return FG[iy * GW + ix]; };
 // Şehir kurulan yer düzleşir ve yeşillenir; dağlar şehrin etrafında kalır
 const flatDirty = new Set(); let lastFlat = 0;
-const ZONE = [140, 186, 80];
+const ZONE = [124, 164, 42];
 function processFlatten(force) {
   if (!flatDirty.size) return;
   const now = performance.now(); if (!force && now - lastFlat < 300) return; lastFlat = now;
@@ -1434,8 +1508,8 @@ function applyCam() {
   const sc = sun.shadow.camera; sc.left = sc.bottom = -s; sc.right = sc.top = s; sc.near = .5; sc.far = s * 5; sc.updateProjectionMatrix();
 }
 function clampRig() {
-  rig.dist = clamp(rig.dist, 2.5, fitTurkeyDist() * 1.5);
-  rig.tx = clamp(rig.tx, 0, W); rig.tz = clamp(rig.tz, 0, H);
+  rig.dist = clamp(rig.dist, 2.5, fitTurkeyDist() * 1.12);
+  rig.tx = clamp(rig.tx, TRB.x0 - 150, TRB.x1 + 150); rig.tz = clamp(rig.tz, TRB.z0 - 150, TRB.z1 + 150);
 }
 let flyTok = 0;
 function flyTo(to, dur = 1200) {
@@ -1543,7 +1617,7 @@ function frame(now) {
   processFlatten(false);
   updateCars(dt, now);
   seaNormal.offset.x += dt * .008; seaNormal.offset.y += dt * .005; seaNormalFar.offset.copy(seaNormal.offset);
-  { const ns = clamp(1.1 - Math.log10(rig.dist) * .4, .03, .45); for (const m of seaMats) m.normalScale.set(ns, ns); }
+  { const ns = clamp(1.2 - Math.log10(rig.dist) * .4, .06, .55); for (const m of seaMats) m.normalScale.set(ns, ns); }
   const co = clamp((rig.dist - 600) / 900, 0, 1) * .5;
   for (const cl of clouds) { cl.position.x += dt * 4; if (cl.position.x > W + 300) cl.position.x = -300; cl.material.opacity = co; cl.visible = co > .01; }
   if (borderLine) borderLine.visible = rig.dist > 180;
