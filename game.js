@@ -22,7 +22,7 @@ const G = 4;                // arazi ızgarası: 4 hücrede bir köşe
 const W = Math.ceil((LON1 - LON0) * COSL * K / G) * G;
 const H = Math.ceil((LAT1 - LAT0) * K / G) * G;
 const GW = W / G + 1, GH = H / G + 1;
-const WORLD_VERSION = 5;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
+const WORLD_VERSION = 6;    // harita üretimi değişirse evlerin yeri kayar: gerçek veri girdikten sonra DEĞİŞTİRME
 const unproj = (x, z) => [x / (COSL * K) + LON0, LAT1 - z / K];
 const proj = (lon, lat) => [(lon - LON0) * COSL * K, (LAT1 - lat) * K];
 
@@ -375,11 +375,17 @@ function canvasTexEarly(w, h, draw, repeat, linear) {
 // 3D arazi: 4 hücrede bir köşe, yükseklik + şehir çevresinde düzleşme
 const terrainGeo = new THREE.PlaneGeometry(W, H, GW - 1, GH - 1).rotateX(-Math.PI / 2).translate(W / 2, 0, H / 2);
 const land = new THREE.Mesh(terrainGeo, new THREE.MeshLambertMaterial({ map: landTex, alphaMap: null, transparent: true, alphaTest: .02 }));
-land.receiveShadow = true; land.castShadow = true;
+land.receiveShadow = true; land.castShadow = false;
 scene.add(land);
 // deniz: kıyıda turkuaz, açıkta lacivert, dalga parıltısı
 const seaNormal = canvasTexEarly(256, 256, (g, w, h) => {
-  const hgt = (x, y) => vnoise(x / 18, y / 18) * .6 + vnoise(x / 7 + 9, y / 7 + 3) * .4, img = g.createImageData(w, h);
+  const per = (x, y, P) => {   // kenarları birleşen (döşenebilir) gürültü
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const q = (a, b) => hash2(((a % P) + P) % P, ((b % P) + P) % P + 101);
+    const A = q(xi, yi), Bq = q(xi + 1, yi), Cq = q(xi, yi + 1), Dq = q(xi + 1, yi + 1);
+    return A + (Bq - A) * u + (Cq - A) * v + (A - Bq - Cq + Dq) * u * v;
+  };
+  const hgt = (x, y) => per(x / 16, y / 16, 16) * .6 + per(x / 8, y / 8, 32) * .4, img = g.createImageData(w, h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const dx = hgt((x + 1) % w, y) - hgt((x - 1 + w) % w, y), dy = hgt(x, (y + 1) % h) - hgt(x, (y - 1 + h) % h);
     const nx = -dx * 2.2, ny = -dy * 2.2, l = Math.hypot(nx, ny, 1), i = (y * w + x) * 4;
@@ -391,9 +397,9 @@ const seaNormalFar = seaNormal.clone(); seaNormalFar.repeat.set(1140, 1140); sea
 const seaCanvas = document.createElement('canvas'); seaCanvas.width = GW; seaCanvas.height = GH;
 const seaColTex = new THREE.CanvasTexture(seaCanvas); seaColTex.colorSpace = THREE.SRGBColorSpace;
 const seaMats = [];
-const seaMat = o => { const m = new THREE.MeshPhongMaterial({ shininess: 60, specular: '#8fb6cf', normalScale: new THREE.Vector2(.5, .5), ...o }); seaMats.push(m); return m; };
+const seaMat = o => { const m = new THREE.MeshPhongMaterial({ shininess: 40, specular: '#6f8fa3', normalScale: new THREE.Vector2(.5, .5), ...o }); seaMats.push(m); return m; };
 scene.add(new THREE.Mesh(new THREE.PlaneGeometry(W, H).rotateX(-Math.PI / 2).translate(W / 2, -.12, H / 2), seaMat({ map: seaColTex, normalMap: seaNormal })));
-scene.add(new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2).translate(W / 2, -.2, H / 2), seaMat({ color: '#24649f', normalMap: seaNormalFar })));
+scene.add(new THREE.Mesh(new THREE.PlaneGeometry(80000, 80000).rotateX(-Math.PI / 2).translate(W / 2, -.2, H / 2), seaMat({ color: '#5c9ccc', normalMap: seaNormalFar })));
 // bulutlar (uzaktan bakınca)
 const cloudTex = canvasTexEarly(128, 128, g => {
   for (let i = 0; i < 9; i++) { const x = 30 + Math.random() * 68, y = 40 + Math.random() * 48, r = 18 + Math.random() * 22;
@@ -558,8 +564,8 @@ function chamfer(src) {
     d[i] = v; }
   return d;
 }
-const C = { steppe: [196,186,104], east: [136,160,76], se: [204,176,114], med: [124,168,62], black: [70,140,52],
-  rock: [140,128,110], snow: [245,247,250], sand: [226,210,165], salt: [238,234,228] };
+const C = { steppe: [226,214,158], east: [184,206,146], se: [232,210,168], med: [176,208,136], black: [138,188,118],
+  rock: [204,194,180], snow: [252,252,252], sand: [242,232,200], salt: [246,244,240] };
 const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 function buildLand() {
   RIVER_PATHS = RIVERS.map(([pts, wd], i) => [meander(pts, i * 7.3 + 1), wd]);
@@ -607,9 +613,9 @@ function buildLand() {
     let h = 0;
     for (const r of RP) if (x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1) { const d = distToPoly(r.q, x, z); h += r.h * Math.exp(-((d / r.w) ** 2)); }
     let pk = 0; for (const p of PK) pk = Math.max(pk, p.h * Math.exp(-((Math.hypot(x - p.x, z - p.z) / p.w) ** 2)));
-    const rug = 1 - Math.abs(2 * vnoise(x * .035, z * .035) - 1), det = fbm(x * .015, z * .015);
+    const rug = fbm(x * .022, z * .022), det = fbm(x * .012, z * .012);
     const plateau = 1.4 * sm(36.7, 37.6, lat) * sm(41.6, 40.6, lat) * sm(29.5, 31, lon) + 2.8 * sm(38, 41, lon) * sm(42.6, 41.4, lat);
-    h = h * (.45 + .9 * rug) + pk + plateau * (.8 + .4 * det) + .8 * det;
+    h = h * (.55 + .7 * rug) + pk + plateau * (.85 + .3 * det) + .5 * det;
     const edge = Math.min(x, W - x, z, H - z);
     h *= sm(0, 5, dW[i]) * (k === 2 ? NFADE[i] : 1);
     const hRaw = water[i] ? 0 : Math.max(0, h); H0[i] = hRaw * 2.1;
@@ -618,30 +624,36 @@ function buildLand() {
     const wB = sm(110, 25, db), wM = sm(90, 15, dm), wE = sm(37.8, 39.8, lon), wS = sm(38.3, 37.3, lat) * sm(36.3, 37.6, lon);
     let col = C.steppe; col = mixc(col, C.east, wE); col = mixc(col, C.se, wS); col = mixc(col, C.med, wM); col = mixc(col, C.black, wB);
     const pv = vnoise(x * .006 + 3, z * .006 + 7), pv2 = vnoise(x * .02 + 11, z * .02 + 5);
-    col = mixc(col, pv < .5 ? [160, 176, 86] : [204, 176, 106], Math.min(1, Math.abs(pv - .5) * 1.6) * (1 - wB) * (1 - wM * .5));
-    col = mixc(col, [150, 170, 80], sm(.62, .8, pv2) * .35 * (1 - wB));
+    col = mixc(col, pv < .5 ? [200, 214, 152] : [232, 212, 164], Math.min(1, Math.abs(pv - .5) * 1.4) * (1 - wB) * (1 - wM * .5));
+    col = mixc(col, [190, 212, 150], sm(.62, .8, pv2) * .3 * (1 - wB));
     const rock = sm(9, 13.5, hRaw), snow = sm(16.5, 20, hRaw + (vnoise(x * .05, z * .05) - .5) * 3);
     col = mixc(col, C.rock, rock * .85); col = mixc(col, C.snow, snow);
     col = mixc(col, C.sand, sm(3.2, .9, dW[i] * G) * Math.max(wM, wB * .6) * (1 - rock));
-    if (k === 2) col = mixc(col, [212, 206, 188], .62);
+    if (k === 2) col = mixc(col, [236, 232, 222], .7);
     COL[i * 3] = col[0]; COL[i * 3 + 1] = col[1]; COL[i * 3 + 2] = col[2];
     DENS[i] = k === 3 || water[i] ? 0 : (.035 + .6 * wB * (1 - rock) + .32 * wM * sm(1, 5, hRaw) * (1 - rock) + .06 * wE) * (1 - snow) * (k === 2 ? .5 : 1);
     ROUNDF[i] = wB * .65;
   }
   // tepeden ışık gelen haritalardaki gibi dağ gölgesi (kabartma)
   const SH = new Float32Array(GW * GH), Lx = -.55, Ly = .72, Lz = -.42, Ll = Math.hypot(Lx, Ly, Lz);
+  let HB = H0.slice();
+  for (let pass = 0; pass < 2; pass++) { const o = new Float32Array(HB.length);
+    for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) { let a = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = ix + dx, Y = iy + dy; if (X < 0 || Y < 0 || X >= GW || Y >= GH) continue; a += HB[Y * GW + X]; n++; }
+      o[iy * GW + ix] = a / n; }
+    HB = o; }
   for (let iy = 0; iy < GH; iy++) for (let ix = 0; ix < GW; ix++) {
-    const i = iy * GW + ix, hl = H0[iy * GW + Math.max(0, ix - 1)], hr = H0[iy * GW + Math.min(GW - 1, ix + 1)];
-    const hu = H0[Math.max(0, iy - 1) * GW + ix], hd = H0[Math.min(GH - 1, iy + 1) * GW + ix];
+    const i = iy * GW + ix, hl = HB[iy * GW + Math.max(0, ix - 1)], hr = HB[iy * GW + Math.min(GW - 1, ix + 1)];
+    const hu = HB[Math.max(0, iy - 1) * GW + ix], hd = HB[Math.min(GH - 1, iy + 1) * GW + ix];
     const nx = hl - hr, ny = 2 * G, nz = hu - hd, nl = Math.hypot(nx, ny, nz);
     const dot = (nx * Lx + ny * Ly + nz * Lz) / nl / Ll;
-    SH[i] = clamp(1 + (dot - Ly / Ll) * 1.9, .62, 1.3);
+    SH[i] = clamp(1 + (dot - Ly / Ll) * 1.25, .8, 1.12);
   }
   // deniz rengi
   const sctx = seaCanvas.getContext('2d'), simg = sctx.createImageData(GW, GH);
   for (let i = 0; i < GW * GH; i++) { const t = dL[i], ex = (i % GW) * G, ez = ((i / GW) | 0) * G, edge = Math.min(ex, W - ex, ez, H - ez);
-    let c = mixc([110, 214, 220], mixc([52, 150, 200], [34, 96, 156], sm(1.2, 12, t)), sm(.15, 1.1, t));
-    c = mixc([36, 100, 160], c, Math.min(sm(30, 160, edge), sm(58, 22, dT[i])));
+    let c = mixc([168, 230, 228], mixc([122, 196, 222], [92, 156, 204], sm(1.5, 14, t)), sm(.15, 1.2, t));
+    c = mixc([92, 156, 204], c, Math.min(sm(30, 160, edge), sm(58, 22, dT[i])));
     simg.data[i * 4] = c[0]; simg.data[i * 4 + 1] = c[1]; simg.data[i * 4 + 2] = c[2]; simg.data[i * 4 + 3] = 255; }
   sctx.putImageData(simg, 0, 0); seaColTex.needsUpdate = true;
   // hücre renkleri
@@ -651,7 +663,7 @@ function buildLand() {
     for (let x = 0; x < W; x++) {
       const c = z * W + x, k = KIND[c]; if (k === 0) continue;
       const ix = Math.min(GW - 2, (x / G) | 0), fx = x / G - ix, i = iy * GW + ix;
-      const nz = (1 + (vnoise(x * .08, z * .08) - .5) * .1 + (hash2(x, z) - .5) * .015) * ((SH[i] * (1 - fx) + SH[i + 1] * fx) * (1 - fz) + (SH[i + GW] * (1 - fx) + SH[i + GW + 1] * fx) * fz);
+      const nz = ((SH[i] * (1 - fx) + SH[i + 1] * fx) * (1 - fz) + (SH[i + GW] * (1 - fx) + SH[i + GW + 1] * fx) * fz);
       for (let ch = 0; ch < 3; ch++) {
         let v = (COL[i * 3 + ch] * (1 - fx) + COL[(i + 1) * 3 + ch] * fx) * (1 - fz) + (COL[(i + GW) * 3 + ch] * (1 - fx) + COL[(i + GW + 1) * 3 + ch] * fx) * fz;
         if (k === 3) v = C.salt[ch];
@@ -660,7 +672,7 @@ function buildLand() {
     }
   }
   // su hücrelerine kıyı rengi ver (yumuşak kenarda siyah halka olmasın)
-  for (let c = 0; c < W * H; c++) if (KIND[c] === 0) { BASE0[c * 3] = 214; BASE0[c * 3 + 1] = 204; BASE0[c * 3 + 2] = 160; }
+  for (let c = 0; c < W * H; c++) if (KIND[c] === 0) { BASE0[c * 3] = 238; BASE0[c * 3 + 1] = 228; BASE0[c * 3 + 2] = 196; }
   buildAlpha(); land.material.alphaMap = alphaTex; land.material.needsUpdate = true;
   restoreBase();
   updateTerrain(0, 0, GW - 1, GH - 1);
@@ -719,7 +731,7 @@ function heightAt(x, z) {
 const flatAt = (x, z) => { const ix = clamp(Math.round(x / G), 0, GW - 1), iy = clamp(Math.round(z / G), 0, GH - 1); return FG[iy * GW + ix]; };
 // Şehir kurulan yer düzleşir ve yeşillenir; dağlar şehrin etrafında kalır
 const flatDirty = new Set(); let lastFlat = 0;
-const ZONE = [124, 164, 42];
+const ZONE = [140, 186, 80];
 function processFlatten(force) {
   if (!flatDirty.size) return;
   const now = performance.now(); if (!force && now - lastFlat < 300) return; lastFlat = now;
@@ -1531,7 +1543,7 @@ function frame(now) {
   processFlatten(false);
   updateCars(dt, now);
   seaNormal.offset.x += dt * .008; seaNormal.offset.y += dt * .005; seaNormalFar.offset.copy(seaNormal.offset);
-  { const ns = clamp(1.2 - Math.log10(rig.dist) * .4, .08, .55); for (const m of seaMats) m.normalScale.set(ns, ns); }
+  { const ns = clamp(1.1 - Math.log10(rig.dist) * .4, .03, .45); for (const m of seaMats) m.normalScale.set(ns, ns); }
   const co = clamp((rig.dist - 600) / 900, 0, 1) * .5;
   for (const cl of clouds) { cl.position.x += dt * 4; if (cl.position.x > W + 300) cl.position.x = -300; cl.material.opacity = co; cl.visible = co > .01; }
   if (borderLine) borderLine.visible = rig.dist > 180;
@@ -2068,6 +2080,6 @@ function bindUI() {
   requestAnimationFrame(frame);
   const m = location.hash.match(/ev=(\d+)/);
   if (m && +m[1] <= houseCount) setTimeout(() => selectHouse(+m[1] - 1), 400);
-  window.G = { rig, playVideo, playPeopleVideo, exitVideo, EVENTS, get houseCount() { return houseCount; }, get DATA() { return DATA; },
+  window.G = { scene, land, rig, playVideo, playPeopleVideo, exitVideo, EVENTS, get houseCount() { return houseCount; }, get DATA() { return DATA; },
     replay, flyTo, housePos, neighborsOf, addressOf, detectProvince, buildPeople, demoComments, parseCommentFile, get NS() { return NS; }, PROV_COUNT, get PENDING() { return PENDING; } };
 })();
